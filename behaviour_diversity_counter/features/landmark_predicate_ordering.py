@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
 
@@ -8,6 +9,9 @@ class LandmarkPredicatesOrderingSimulator(DimensionConstructorSimulator):
         vars = list(map(lambda expr: FreeVarsExtractor().get(expr), self.task.goals))
         self.vars = [elem for s in vars for elem in s]
     
+    def _estimate_domain(self):
+        self.estimated_domain_size = math.factorial(len(self.vars))
+
     def plan_behaviour(self, plan):
         _time_step_history = defaultdict(list)
         for t, state in enumerate(plan.states):

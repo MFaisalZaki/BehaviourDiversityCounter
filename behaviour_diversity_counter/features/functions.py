@@ -9,8 +9,12 @@ class FunctionsSimulator(DimensionConstructorSimulator):
     def __init__(self, task, addinfo):
         super().__init__(task, 'function_value', parse_functions_file(addinfo))
     
+    def _estimate_domain(self):
+        self.estimated_domain_size = 1
+        for func_name, func_info in self.addinfo.items():
+            self.estimated_domain_size *= len(set(range(func_info['min'], func_info['max'] - func_info['delta'], func_info['delta'])))
+    
     def plan_behaviour(self, plan):
-        
         vars_values_over_time = defaultdict(list)
         for t, state in enumerate(plan.states):
             var_map = {str(e).replace('(','_').replace(')','').replace(' ','_').replace(',','') : e for e in state._values}
@@ -34,8 +38,8 @@ class ResourceTransformer(Transformer):
     def resource_line(self, token):
         return {
             'name':  token[0].value,
-            'min':   int(token[1].value),
-            'max':   int(token[2].value),
+            'min':   int(token[2].value),
+            'max':   int(token[1].value),
             'delta': int(token[3].value)
         }
 

@@ -20,7 +20,9 @@ class BehaviourDiversityCounter:
         self.task      = task
         self.planslist = list(planlist)
         self.features  = {feat_name: features_map[feat_name](task, addinfo) for feat_name, addinfo in f}
-        self.colleted_behaviours = set()
+        self.collected_behaviours = set()
+        self.estimated_behaviours = set()
+        self._estimated_behaviour_count = -1
 
     def _simulate_(self, plan):
         states = []
@@ -39,8 +41,8 @@ class BehaviourDiversityCounter:
         return ' $$ '.join([dim.plan_behaviour(plan) for name, dim in self.features.items()])
 
     def count(self):
-        if len(self.colleted_behaviours) == 0: self.optimise(k=len(self.planslist))
-        return len(self.colleted_behaviours)
+        if len(self.collected_behaviours) == 0: self.optimise(k=len(self.planslist))
+        return len(self.collected_behaviours)
     
     def optimise(self, k):
         _behaviours = defaultdict(list)
@@ -48,7 +50,7 @@ class BehaviourDiversityCounter:
         for idx, p in enumerate(self.planslist):
             states    = self._simulate_(p)
             behaviour = self._extract_behaviour_(p, states)
-            self.colleted_behaviours.add(behaviour)
+            self.collected_behaviours.add(behaviour)
             setattr(self.planslist[idx], 'behaviour', behaviour)
             _behaviours[behaviour].append(self.planslist[idx])
         
@@ -57,4 +59,14 @@ class BehaviourDiversityCounter:
                 if len(_ret_plans) >= k: break
                 if len(_behaviours[key]) == 0: continue
                 _ret_plans.append(_behaviours[key].pop())
+        
+        # estimate the maximum behaviour count.
+        self._estimated_behaviour_count = 1
+        for f, feature in self.features.items():
+            feature._estimate_domain()
+            self._estimated_behaviour_count *= feature.estimated_domain_size
+            
         return _ret_plans
+    
+    def estimated_behaviour_count(self):
+        return self._estimated_behaviour_count

@@ -1,4 +1,4 @@
-
+from itertools import chain, combinations
 from collections import defaultdict
 from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
 
@@ -9,6 +9,14 @@ class UtilityValueSimulator(DimensionConstructorSimulator):
         vars = list(map(lambda expr: FreeVarsExtractor().get(expr), self.task.goals))
         self.vars = [(str(elem), elem) for s in vars for elem in s]
     
+    def _estimate_domain(self):
+        estimated_domain = set()
+        possible_acheived_goals = set(chain.from_iterable(combinations(self.addinfo['utility-goals'], r) for r in range(1, len(self.addinfo['utility-goals']) + 1)))
+        for achieved_goals in possible_acheived_goals:
+            val = str(sum([self.addinfo['utility-goals'][g] for g in achieved_goals])) + ' -- ' + ','.join(f'{k}={str(v)}' for k,v in self.addinfo['utility-goals'].items())
+            estimated_domain.add(val)
+        self.estimated_domain_size = len(estimated_domain)
+
     def plan_behaviour(self, plan):
         achieved_utilities = defaultdict(list)
         _acheived_utilities = defaultdict(list)
