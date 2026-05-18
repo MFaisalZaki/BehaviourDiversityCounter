@@ -17,3 +17,6 @@ class MakespanOptimalCostSimulator(DimensionConstructorSimulator):
     def plan_behaviour(self, plan):
         self.domain.add(len(plan.actions))
         return f'{self.name}:' + str(len(plan.actions))
+    
+    def distance(self, plan1, plan2):
+        return abs(len(plan1.actions) - len(plan2.actions))

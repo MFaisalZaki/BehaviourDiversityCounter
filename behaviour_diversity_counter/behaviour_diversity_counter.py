@@ -44,6 +44,9 @@ class BehaviourDiversityCounter:
         if len(self.collected_behaviours) == 0: self.optimise(k=len(self.planslist))
         return len(self.collected_behaviours)
     
+    def _infer_plan_behaviour(self, plan):
+        return self._extract_behaviour_(plan, self._simulate_(plan))
+    
     def optimise(self, k):
         _behaviours = defaultdict(list)
         _ret_plans = []
@@ -70,3 +73,16 @@ class BehaviourDiversityCounter:
     
     def estimated_behaviour_count(self):
         return self._estimated_behaviour_count
+    
+    def compute_novelty_score(self):
+        def pair_distance(b1, b2):
+            return sum(f.distance(b1, b2) for f in self.behaviour_counter.features.values()) / len(self.behaviour_counter.features) if len(self.behaviour_counter.features) > 0 else 0.0
+        
+        _behaviours = [self._infer_plan_behaviour(p) for p in self.plans]
+        n = len(_behaviours)
+        # Cache the symmetric matrix once — pair_distance is the hot path.
+        dmat = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                dmat.append(pair_distance(_behaviours[i], _behaviours[j]))
+        return sum(dmat)/len(dmat) if len(dmat) > 0 else 0.0

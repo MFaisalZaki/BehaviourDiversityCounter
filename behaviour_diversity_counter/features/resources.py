@@ -23,6 +23,16 @@ class ResourceCountSimulator(DimensionConstructorSimulator):
         val = len(list(filter(lambda e: e[1] > 0, resource_usage.items())))
         self.domain.add(val)
         return f'{self.name}:' + str(val)
+    
+    def distance(self, plan1, plan2):
+        plan1_dim_value = next(filter(lambda e: self.name in e, plan1.split('$$')), None)        
+        plan2_dim_value = next(filter(lambda e: self.name in e, plan2.split('$$')), None)
+        
+        assert plan1_dim_value is not None and plan2_dim_value is not None, 'The dimension value should be present in the plan behaviour.'
+        
+        plan1_dim_value = int(plan1_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
+        plan2_dim_value = int(plan2_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
+        return abs(plan1_dim_value - plan2_dim_value)
 
 class ResourceTransformer(Transformer):
     def resource_line(self, token):

@@ -9,3 +9,6 @@ class DimensionConstructorSimulator:
     
     def _estimate_domain(self):
         assert False, 'This method should be implemented by the child class.'
+    
+    def distance(self, plan1, plan2):
+        assert False, 'This method should be implemented by the child class.'

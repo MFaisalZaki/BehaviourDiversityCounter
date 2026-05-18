@@ -20,3 +20,17 @@ class LandmarkPredicatesOrderingSimulator(DimensionConstructorSimulator):
         val = '->'.join(map(lambda e: str(e[0]), sorted([(g, next((i for i, x in enumerate(_time_step_history[g]) if x), -1)) for g in self.vars], key=lambda e:e[1])))
         self.domain.add(val)
         return f'{self.name}:' + val
+    
+    def distance(self, plan1, plan2):
+        
+        plan1_dim_value = next(filter(lambda e: self.name in e, plan1.split('$$')), None)        
+        plan2_dim_value = next(filter(lambda e: self.name in e, plan2.split('$$')), None)
+        
+        assert plan1_dim_value is not None and plan2_dim_value is not None, 'The dimension value should be present in the plan behaviour.'
+        
+        plan1_dim_value = plan1_dim_value.strip().replace(self.name + ':', '').replace(' ', '').split('->')
+        plan2_dim_value = plan2_dim_value.strip().replace(self.name + ':', '').replace(' ', '').split('->')
+
+        hamming_distance = [x == y for x,y in zip(plan1_dim_value, plan2_dim_value)].count(False)
+        distance = hamming_distance/len(plan1_dim_value) if len(plan1_dim_value) > 0 else 0.0
+        return distance
