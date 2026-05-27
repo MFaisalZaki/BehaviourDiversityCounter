@@ -3,14 +3,15 @@ from unified_planning.shortcuts import SequentialSimulator
 
 from behaviour_diversity_counter.features.goal_predicate_ordering import GoalPredicatesOrderingSimulator
 from behaviour_diversity_counter.features.cost_bound_makespan_optimal import MakespanOptimalCostSimulator
-from behaviour_diversity_counter.features.resources import ResourceCountSimulator
+from behaviour_diversity_counter.features.resources import ResourceCountSimulator, ResourceUsedSimulator
 from behaviour_diversity_counter.features.utility_value import UtilityValueSimulator
 from behaviour_diversity_counter.features.functions import FunctionsSimulator
 
 features_map = {
     'go': GoalPredicatesOrderingSimulator,
     'cb': MakespanOptimalCostSimulator,
-    'ru': ResourceCountSimulator,
+    'rc': ResourceCountSimulator,
+    'ru': ResourceUsedSimulator,
     'uv': UtilityValueSimulator,
     'fn': FunctionsSimulator
 }
@@ -23,17 +24,17 @@ class BehaviourDiversityCounter:
         self.collected_behaviours = set()
         self.estimated_behaviours = set()
         self._estimated_behaviour_count = -1
+        self._simulator = SequentialSimulator(problem=task)
 
     def _simulate_(self, plan):
         states = []
-        with SequentialSimulator(problem=self.task) as simulator:
-            initial_state = simulator.get_initial_state()
-            current_state = initial_state
-            states += [current_state]
-            for action_instance in plan.actions:
-                current_state = simulator.apply(current_state, action_instance)
-                if current_state is None: return []
-                states.append(current_state)
+        initial_state = self._simulator.get_initial_state()
+        current_state = initial_state
+        states += [current_state]
+        for action_instance in plan.actions:
+            current_state = self._simulator.apply(current_state, action_instance)
+            if current_state is None: return []
+            states.append(current_state)
         return states
     
     def _extract_behaviour_(self, plan, states):

@@ -8,7 +8,7 @@ from behaviour_diversity_counter.features.base import DimensionConstructorSimula
 
 class ResourceCountSimulator(DimensionConstructorSimulator):
     def __init__(self, task, addinfo):
-        super().__init__(task, 'ru', {'resources_list': parse_resource_file(addinfo)})
+        super().__init__(task, 'rc', {'resources_list': parse_resource_file(addinfo)})
         self.addinfo['objects'] = set(map(str,filter(lambda e: e.name in set(map(lambda e: e['name'], self.addinfo['resources_list'].values())), self.task.all_objects)))
     
     def _estimate_domain(self):
@@ -33,6 +33,25 @@ class ResourceCountSimulator(DimensionConstructorSimulator):
         plan1_dim_value = int(plan1_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
         plan2_dim_value = int(plan2_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
         return abs(plan1_dim_value - plan2_dim_value)
+
+class ResourceUsedSimulator(DimensionConstructorSimulator):
+    def __init__(self, task, addinfo):
+        super().__init__(task, 'ru', {'resources_list': parse_resource_file(addinfo)})
+        self.addinfo['objects'] = set(map(str,filter(lambda e: e.name in set(map(lambda e: e['name'], self.addinfo['resources_list'].values())), self.task.all_objects)))
+    
+    def _estimate_domain(self):
+        # the maximum resource count is the number of objects that can be used as resources.
+        self.estimated_domain_size = len(set(chain.from_iterable(combinations(self.addinfo['objects'], r) for r in range(1, len(self.addinfo['objects']) + 1))))
+
+    def plan_behaviour(self, plan):
+        resource_usage = {o: 0 for o in self.addinfo['objects']}
+        for action in plan.actions:
+            for used_resource in set.intersection(set(map(str, action.actual_parameters)), set(self.addinfo['objects'])):
+                resource_usage[used_resource] += 1
+        return ' $$ '.join(map(lambda e: f'{e[0]}={e[1]}', resource_usage.items()))
+    
+    def distance(self, plan1, plan2):
+        assert False, 'Distance function is not implemented for ResourceUsedSimulator.'
 
 class ResourceTransformer(Transformer):
     def resource_line(self, token):
