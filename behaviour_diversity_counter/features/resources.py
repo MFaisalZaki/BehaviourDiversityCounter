@@ -20,19 +20,22 @@ class ResourceCountSimulator(DimensionConstructorSimulator):
         for action in plan.actions:
             for used_resource in set.intersection(set(map(str, action.actual_parameters)), set(self.addinfo['objects'])):
                 resource_usage[used_resource] += 1
-        val = len(list(filter(lambda e: e[1] > 0, resource_usage.items())))
-        self.domain.add(val)
-        return f'{self.name}:' + str(val)
-    
+        used = frozenset(o for o, c in resource_usage.items() if c > 0)
+        self.domain.add(used)
+        # encode the *set* of used resources so distance() can compute Jaccard.
+        return f'{self.name}:' + ','.join(sorted(used))
+
+    def _used_set(self, plan):
+        token = next(filter(lambda e: self.name in e, plan.split('$$')), None)
+        assert token is not None, 'The dimension value should be present in the plan behaviour.'
+        payload = token.strip().replace(self.name + ':', '').strip()
+        return set(filter(None, payload.split(',')))
+
     def distance(self, plan1, plan2):
-        plan1_dim_value = next(filter(lambda e: self.name in e, plan1.split('$$')), None)        
-        plan2_dim_value = next(filter(lambda e: self.name in e, plan2.split('$$')), None)
-        
-        assert plan1_dim_value is not None and plan2_dim_value is not None, 'The dimension value should be present in the plan behaviour.'
-        
-        plan1_dim_value = int(plan1_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
-        plan2_dim_value = int(plan2_dim_value.strip().replace(self.name + ':', '').replace(' ', ''))
-        return abs(plan1_dim_value - plan2_dim_value)
+        s1, s2 = self._used_set(plan1), self._used_set(plan2)
+        if not s1 and not s2:
+            return 0.0
+        return 1.0 - len(s1 & s2) / len(s1 | s2)
 
 class ResourceUsedSimulator(DimensionConstructorSimulator):
     def __init__(self, task, addinfo):
