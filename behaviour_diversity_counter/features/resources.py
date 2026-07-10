@@ -46,7 +46,9 @@ class ResourceUsedSimulator(DimensionConstructorSimulator):
         return f'{self.name}:' + ','.join(sorted(used))
 
     def _used_set(self, plan):
-        token = next(filter(lambda e: self.name in e, plan.split('$$')), None)
+        # Match on the token prefix, not a substring: the goal-ordering token
+        # may contain 'ru' inside predicate/object names (e.g. 'truck1').
+        token = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan.split('$$')), None)
         assert token is not None, 'The dimension value should be present in the plan behaviour.'
         payload = token.strip().replace(self.name + ':', '').strip()
         return set(filter(None, payload.split(',')))

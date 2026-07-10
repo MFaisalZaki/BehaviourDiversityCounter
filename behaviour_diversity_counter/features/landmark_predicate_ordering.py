@@ -23,8 +23,10 @@ class LandmarkPredicatesOrderingSimulator(DimensionConstructorSimulator):
     
     def distance(self, plan1, plan2):
         
-        plan1_dim_value = next(filter(lambda e: self.name in e, plan1.split('$$')), None)        
-        plan2_dim_value = next(filter(lambda e: self.name in e, plan2.split('$$')), None)
+        # Match on the token prefix, not a substring: predicate/object names in
+        # other tokens may contain this dimension's name (e.g. 'truck' vs 'ru').
+        plan1_dim_value = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan1.split('$$')), None)
+        plan2_dim_value = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan2.split('$$')), None)
         
         assert plan1_dim_value is not None and plan2_dim_value is not None, 'The dimension value should be present in the plan behaviour.'
         
