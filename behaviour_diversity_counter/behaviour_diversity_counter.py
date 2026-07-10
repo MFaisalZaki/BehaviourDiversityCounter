@@ -77,9 +77,9 @@ class BehaviourDiversityCounter:
     
     def compute_novelty_score(self):
         def pair_distance(b1, b2):
-            return sum(f.distance(b1, b2) for f in self.behaviour_counter.features.values()) / len(self.behaviour_counter.features) if len(self.behaviour_counter.features) > 0 else 0.0
+            return sum(f.distance(b1, b2) for f in self.features.values()) / len(self.features) if len(self.features) > 0 else 0.0
         
-        _behaviours = [self._infer_plan_behaviour(p) for p in self.plans]
+        _behaviours = [self._infer_plan_behaviour(p) for p in self.planslist]
         n = len(_behaviours)
         # Cache the symmetric matrix once — pair_distance is the hot path.
         dmat = []
