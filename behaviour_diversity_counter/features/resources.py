@@ -20,10 +20,14 @@ class ResourceCountSimulator(DimensionConstructorSimulator):
         for action in plan.actions:
             for used_resource in set.intersection(set(map(str, action.actual_parameters)), set(self.addinfo['objects'])):
                 resource_usage[used_resource] += 1
-        return ' $$ '.join(map(lambda e: f'{e[0]}={e[1]}', resource_usage.items()))
-    
+        # One prefixed token, comma-separated: ' $$ ' separates *dimensions*, so it
+        # cannot also separate counts within this one. Sorted because addinfo['objects']
+        # is a set, whose iteration order varies between processes.
+        counts = ','.join(f'{o}={resource_usage[o]}' for o in sorted(resource_usage))
+        return f'{self.name}:' + counts
+
     def distance(self, plan1, plan2):
-        assert False, 'Distance function is not implemented for ResourceUsedSimulator.'
+        assert False, 'Distance function is not implemented for ResourceCountSimulator.'
     
 
 class ResourceUsedSimulator(DimensionConstructorSimulator):

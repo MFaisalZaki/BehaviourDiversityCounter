@@ -32,14 +32,15 @@ class FunctionsSimulator(DimensionConstructorSimulator):
         
         val = ','.join([f'{k}:{str(v)}' for k,v in vars_values_over_time.items()])
         self.domain.add(val)
-        return ','.join(val)
+        return val
 
 class ResourceTransformer(Transformer):
     def resource_line(self, token):
+        # Grammar order is NAME MIN MAX DELTA.
         return {
             'name':  token[0].value,
-            'min':   int(token[2].value),
-            'max':   int(token[1].value),
+            'min':   int(token[1].value),
+            'max':   int(token[2].value),
             'delta': int(token[3].value)
         }
 

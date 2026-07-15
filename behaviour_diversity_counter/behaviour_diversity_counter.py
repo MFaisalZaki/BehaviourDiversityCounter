@@ -16,6 +16,14 @@ features_map = {
     'fn': FunctionsSimulator
 }
 
+class InapplicablePlanError(ValueError):
+    """A plan could not be simulated against the task.
+
+    The state trace is what every dimension reads, so a plan that cannot be
+    replayed has no behaviour to report. Counting it anyway would silently
+    inflate the diversity count with a behaviour no valid plan produced.
+    """
+
 class BehaviourDiversityCounter:
     def __init__(self, task, planlist, f):
         self.task      = task
@@ -31,9 +39,14 @@ class BehaviourDiversityCounter:
         initial_state = self._simulator.get_initial_state()
         current_state = initial_state
         states += [current_state]
-        for action_instance in plan.actions:
-            current_state = self._simulator.apply(current_state, action_instance)
-            if current_state is None: return []
+        for step, action_instance in enumerate(plan.actions):
+            next_state = self._simulator.apply(current_state, action_instance)
+            if next_state is None:
+                raise InapplicablePlanError(
+                    f'{action_instance} at step {step} is not applicable to the state '
+                    f'it reaches; the plan cannot be simulated against this task.'
+                )
+            current_state = next_state
             states.append(current_state)
         return states
     
