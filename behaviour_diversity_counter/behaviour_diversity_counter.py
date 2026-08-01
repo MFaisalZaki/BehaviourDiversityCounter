@@ -24,54 +24,53 @@ class InapplicablePlanError(ValueError):
     """
 
 class BehaviourDiversityCounter:
-    def __init__(self, task, plans, dimensions):
-        self.task  = task
-        self.plans = list(plans)
+    def __init__(self, task, dimensions):
+        self.task = task
         self.dimensions = {}
         for name, addinfo in dimensions:
             if name not in dimensions_map:
                 raise ValueError(f"unknown dimension '{name}'; valid keys: {sorted(dimensions_map)}")
             self.dimensions[name] = dimensions_map[name](task, addinfo)
         self._simulator = SequentialSimulator(problem=task)
-        self._plan_behaviours = None
+        self._behaviour_cache = {}
 
-    @property
-    def behaviours(self):
-        """The distinct behaviours exhibited by the plan set."""
-        return set(self._infer_behaviours())
+    def behaviours(self, plans):
+        """The distinct behaviours exhibited by the given plans."""
+        return set(self._behaviours_of(plans))
 
-    def bdc(self):
+    def bdc(self, plans):
         """The Behaviour Diversity Count indicator: the number of distinct
-        behaviours the plan set covers."""
-        return len(self.behaviours)
+        behaviours the given plans cover."""
+        return len(self.behaviours(plans))
 
-    def b_maxsum(self):
+    def b_maxsum(self, plans):
         """The B-MaxSum indicator: the sum of pairwise distances between the
         distinct behaviours. Duplicates are discarded before aggregation."""
-        distinct = list(dict.fromkeys(self._infer_behaviours()))
+        distinct = list(dict.fromkeys(self._behaviours_of(plans)))
         return sum(self._pair_distance(distinct[i], distinct[j])
                    for i in range(len(distinct)) for j in range(i + 1, len(distinct)))
 
-    def extract(self, k, indicator='bdc'):
-        """Select k plans from the pool, maximising the chosen indicator."""
+    def extract(self, plans, k, indicator='bdc'):
+        """Select k plans from the given pool, maximising the chosen indicator."""
         extractors = {'bdc': self._extract_bdc, 'bmaxsum': self._extract_b_maxsum}
         if indicator not in extractors:
             raise ValueError(f"unknown indicator '{indicator}'; valid indicators: {sorted(extractors)}")
-        self._infer_behaviours()
-        return extractors[indicator](k)
+        plans = list(plans)
+        return extractors[indicator](plans, self._behaviours_of(plans), k)
 
-    def _infer_behaviours(self):
-        # One simulation pass shared by every indicator: replay each plan, join its
-        # per-dimension tokens, and annotate the plan object with the result.
-        if self._plan_behaviours is None:
-            self._plan_behaviours = []
-            for plan in self.plans:
+    def _behaviours_of(self, plans):
+        # Replay each plan once per counter: the result is cached by plan identity
+        # and attached to the plan object as plan.behaviour.
+        result = []
+        for plan in plans:
+            if id(plan) not in self._behaviour_cache:
                 setattr(plan, 'states', self._simulate(plan))
                 behaviour = ' $$ '.join(dim.plan_behaviour(plan) for dim in self.dimensions.values())
                 delattr(plan, 'states')  # the trace is only needed while the tokens are built
                 setattr(plan, 'behaviour', behaviour)
-                self._plan_behaviours.append(behaviour)
-        return self._plan_behaviours
+                self._behaviour_cache[id(plan)] = behaviour
+            result.append(self._behaviour_cache[id(plan)])
+        return result
 
     def _simulate(self, plan):
         states = []
@@ -89,39 +88,39 @@ class BehaviourDiversityCounter:
             states.append(current_state)
         return states
 
-    def _extract_bdc(self, k):
+    def _extract_bdc(self, plans, behaviours, k):
         # Scan the pool in order, taking a plan only when its behaviour is new; once
         # every behaviour is covered, fill the remaining slots with duplicates, which
         # leave the indicator unchanged.
         chosen, seen = [], set()
-        for idx, p in enumerate(self.plans):
+        for idx, behaviour in enumerate(behaviours):
             if len(chosen) == k: break
-            if p.behaviour not in seen:
-                seen.add(p.behaviour)
+            if behaviour not in seen:
+                seen.add(behaviour)
                 chosen.append(idx)
-        for idx in range(len(self.plans)):
+        for idx in range(len(plans)):
             if len(chosen) == k: break
             if idx not in chosen:
                 chosen.append(idx)
-        return [self.plans[idx] for idx in chosen]
+        return [plans[idx] for idx in chosen]
 
-    def _extract_b_maxsum(self, k):
+    def _extract_b_maxsum(self, plans, behaviours, k):
         # Greedy: repeatedly add the plan whose behaviour has the greatest summed
         # distance to the behaviours already selected. The first pick is arbitrary
         # (singleton sets score zero), and duplicates gain nothing, so they are only
         # picked once every remaining candidate repeats a selected behaviour.
-        remaining = list(range(len(self.plans)))
-        chosen, behaviours = [], []
+        remaining = list(range(len(plans)))
+        chosen, selected = [], []
         while remaining and len(chosen) < k:
             def gain(idx):
-                b = self.plans[idx].behaviour
-                return 0.0 if b in behaviours else sum(self._pair_distance(b, other) for other in behaviours)
+                b = behaviours[idx]
+                return 0.0 if b in selected else sum(self._pair_distance(b, other) for other in selected)
             best = max(remaining, key=gain)
             remaining.remove(best)
             chosen.append(best)
-            if self.plans[best].behaviour not in behaviours:
-                behaviours.append(self.plans[best].behaviour)
-        return [self.plans[idx] for idx in chosen]
+            if behaviours[best] not in selected:
+                selected.append(behaviours[best])
+        return [plans[idx] for idx in chosen]
 
     def _pair_distance(self, b1, b2):
         return sum(d.distance(b1, b2) for d in self.dimensions.values()) / len(self.dimensions) if len(self.dimensions) > 0 else 0.0

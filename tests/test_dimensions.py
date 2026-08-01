@@ -369,11 +369,10 @@ class TestResourceCount:
         self, task, resource_file, plan_l1_then_l2
     ):
         counter = BehaviourDiversityCounter(
-            task, [plan_l1_then_l2], [('go', None), ('rc', resource_file), ('ru', resource_file)]
+            task, [('go', None), ('rc', resource_file), ('ru', resource_file)]
         )
 
-        counter.bdc()
-        behaviour = next(iter(counter.behaviours))
+        behaviour = next(iter(counter.behaviours([plan_l1_then_l2])))
 
         # One token per dimension, recoverable by prefix.
         assert len(behaviour.split(' $$ ')) == 3
@@ -485,7 +484,7 @@ class TestFunctions:
         self, task, function_file, plan_l1_then_l2
     ):
         """End to end: the fn dimension was unusable as shipped."""
-        counter = BehaviourDiversityCounter(task, [plan_l1_then_l2], [('fn', function_file)])
+        counter = BehaviourDiversityCounter(task, [('fn', function_file)])
 
-        assert counter.bdc() == 1
-        assert counter.behaviours == {'fuel:8'}
+        assert counter.bdc([plan_l1_then_l2]) == 1
+        assert counter.behaviours([plan_l1_then_l2]) == {'fuel:8'}

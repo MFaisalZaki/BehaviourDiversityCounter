@@ -10,13 +10,17 @@ agree on every dimension are one behaviour, however different their action seque
 
 From a set of plans you can then get:
 
-- `bdc()` — the Behaviour Diversity Count indicator: how many distinct behaviours the
-  set actually covers.
-- `b_maxsum()` — the B-MaxSum indicator: sum of pairwise distances between the distinct
-  behaviours.
-- `extract(k, indicator=...)` — select `k` plans maximising either indicator, `'bdc'`
-  (default) or `'bmaxsum'` — see Extracting diverse subsets.
-- `behaviours` — the set of distinct behaviour strings the plans exhibit.
+- `bdc(plans)` — the Behaviour Diversity Count indicator: how many distinct behaviours
+  the set actually covers.
+- `b_maxsum(plans)` — the B-MaxSum indicator: sum of pairwise distances between the
+  distinct behaviours.
+- `extract(plans, k, indicator=...)` — select `k` plans maximising either indicator,
+  `'bdc'` (default) or `'bmaxsum'` — see Extracting diverse subsets.
+- `behaviours(plans)` — the set of distinct behaviour strings the plans exhibit.
+
+The counter itself is bound to a task and its dimensions; the plan set is an argument
+to every indicator, so one counter can score any number of plan sets — including the
+subsets `extract` returns.
 
 Plans are replayed against the task, so they must be applicable to it: a plan whose
 preconditions fail raises `InapplicablePlanError` rather than being counted.
@@ -81,13 +85,14 @@ l1_first = plan((move, (tr1, l0, l1)), (drop, (tr1, l1)),
 l2_first = plan((move, (tr1, l0, l2)), (drop, (tr1, l2)),
                 (move, (tr1, l2, l1)), (drop, (tr1, l1)))
 
-counter = BehaviourDiversityCounter(task, [l1_first, l2_first], [('go', None)])
+counter = BehaviourDiversityCounter(task, [('go', None)])
+plans = [l1_first, l2_first]
 
-counter.bdc()         # 2
-counter.behaviours    # {'go:delivered(l1)->delivered(l2)',
-                      #  'go:delivered(l2)->delivered(l1)'}
-counter.b_maxsum()    # 1.0 -- one pair of behaviours, fully reordered
-counter.extract(k=1)  # one plan, covering one behaviour
+counter.bdc(plans)          # 2
+counter.behaviours(plans)   # {'go:delivered(l1)->delivered(l2)',
+                            #  'go:delivered(l2)->delivered(l1)'}
+counter.b_maxsum(plans)     # 1.0 -- one pair of behaviours, fully reordered
+counter.extract(plans, k=1) # one plan, covering one behaviour
 ```
 
 Both plans cost the same and use the same truck, so under `('cb', ...)` or `('ru', ...)`
@@ -97,18 +102,20 @@ diversity for your problem.
 ## Constructing the counter
 
 ```python
-BehaviourDiversityCounter(task, plans, dimensions)
+BehaviourDiversityCounter(task, dimensions)
 ```
 
 | argument | meaning |
 | --- | --- |
 | `task` | the `unified_planning` `Problem` the plans were built for |
-| `plans` | any iterable of `SequentialPlan`; it is materialised into a list |
 | `dimensions` | an iterable of `(dimension_key, addinfo)` pairs — see below |
 
-Each plan is replayed through a `SequentialSimulator`, and each dimension turns the
-resulting state trace into a token. The tokens are joined with ` $$ ` into one behaviour
-string per plan, which is also attached to the plan object as `plan.behaviour`.
+The plan sets are not held by the counter: `bdc`, `b_maxsum`, `behaviours` and `extract`
+each take any iterable of `SequentialPlan` as an argument. Each plan is replayed through
+a `SequentialSimulator`, and each dimension turns the resulting state trace into a token.
+The tokens are joined with ` $$ ` into one behaviour string per plan, which is attached
+to the plan object as `plan.behaviour` and cached by plan identity — a plan is simulated
+at most once per counter, however many sets it appears in.
 
 ## Dimensions
 
@@ -177,7 +184,7 @@ in, so `fuel = 80` over `0..100` step `10` becomes bin `8`.
 
 ## B-MaxSum metric
 
-`b_maxsum()` discards duplicate behaviours, then sums the distance over
+`b_maxsum(plans)` discards duplicate behaviours, then sums the distance over
 every unordered pair of the distinct behaviours that remain. A pair's distance is the
 mean of the per-dimension `distance()` values, so each pair scores in `[0, 1]` — but the
 metric is a sum over pairs, not an average, so it grows with the number of distinct
@@ -197,8 +204,8 @@ can only be computed over dimension sets drawn from `go`, `cb` and `ru`.
 
 ## Extracting diverse subsets
 
-`extract(k, indicator=...)` selects `k` plans from the pool, maximising the chosen
-indicator:
+`extract(plans, k, indicator=...)` selects `k` plans from the given pool, maximising the
+chosen indicator:
 
 - `'bdc'` (default) scans the pool in order and takes a plan only when its behaviour has
   not been seen yet. Once every behaviour is covered, the remaining slots are filled with
