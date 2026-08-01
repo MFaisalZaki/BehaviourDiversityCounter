@@ -59,7 +59,15 @@ def style():
         'legend.frameon': False,
         'legend.fontsize': 7,
         'figure.dpi': 200,
+        # --- LaTeX inclusion ------------------------------------------------
+        # Type 42 (TrueType) rather than matplotlib's default Type 3: IEEE,
+        # ACM and arXiv all flag or reject Type 3 fonts in submitted PDFs.
+        'pdf.fonttype': 42,
+        'ps.fonttype': 42,
+        # Crop to the drawn content, with only a hairline of padding, so
+        # \includegraphics needs no trimming and no \vspace correction.
         'savefig.bbox': 'tight',
+        'savefig.pad_inches': 0.01,
     })
     return plt
 
@@ -79,8 +87,14 @@ def as_float(value):
 
 
 def save(figure, out_dir, name):
+    """Write the figure as PDF (for LaTeX) and PNG (for quick viewing).
+
+    bbox/pad are passed explicitly as well as set in rcParams so the crop
+    holds even if a caller restyles.
+    """
     for extension in ('pdf', 'png'):
-        figure.savefig(os.path.join(out_dir, f'{name}.{extension}'))
+        figure.savefig(os.path.join(out_dir, f'{name}.{extension}'),
+                       bbox_inches='tight', pad_inches=0.01)
     print(f'wrote {os.path.join(out_dir, name)}.pdf/.png')
 
 
@@ -208,47 +222,141 @@ def figure_exp4(plt, rows, out_dir):
     plt.close(figure)
 
 
-def figure_exp5(plt, rows, out_dir):
-    """Runtime against pool size (log-log): BDC linear, the sums quadratic."""
-    series = [('t_bdc_warm', 'BDC'),
-              ('t_bmaxsum_cold', 'B-MaxSum'),
-              ('t_maxsum_stability_cold', 'plan-level MaxSum (Stability)')]
-    figure, (left, right) = plt.subplots(1, 2, figsize=(FULL_IN, 2.3))
+# Pool-size buckets for the runtime figure. Pool sizes cluster hard on the
+# requested-k values (5, 10, 100, 1000), so these edges keep every bucket
+# populated while spanning three orders of magnitude.
+SIZE_BUCKETS = [(1, 1, '1'), (2, 4, '2-4'), (5, 9, '5-9'), (10, 49, '10-49'),
+                (50, 99, '50-99'), (100, 499, '100-499'), (500, 10 ** 9, '500+')]
 
-    for slot, (field, label) in enumerate(series):
-        points = [(as_float(row['n_plans']), as_float(row[field]))
-                  for row in rows if as_float(row.get(field))]
-        points = [(n, t) for n, t in points if n and t and t > 0]
+# Each indicator with the complexity its analysis predicts, as an exponent of
+# the pool size n. B-MaxSum is O(b^2) in the number of *distinct behaviours*;
+# since b <= n that is an upper bound of n^2 here, which is why its overlay is
+# labelled as a bound rather than a prediction -- and why it also carries a fit
+# against b, the variable its bound is actually stated in.
+RUNTIME_SERIES = [
+    {'field': 't_bdc_warm', 'label': 'BDC (warm)',
+     'exponent': 1.0, 'theory': 'O(n)'},
+    {'field': 't_bmaxsum_cold', 'label': 'B-MaxSum (cold)',
+     'exponent': 2.0, 'theory': 'O(b$^2$) $\\leq$ O(n$^2$)', 'also_fit': ('b', 'b')},
+    {'field': 't_maxsum_stability_cold', 'label': 'plan-level MaxSum-Stability (cold)',
+     'exponent': 2.0, 'theory': 'O(n$^2$)'},
+]
+
+
+def theory_label_plain(label):
+    """The mathtext complexity label as plain text, for stdout."""
+    return (label.replace('$^2$', '^2').replace('$\\leq$', '<=')
+                 .replace('$', ''))
+
+
+def _log_fit_exponent(points):
+    """Least-squares slope of log t against log n, and its R^2."""
+    xs = [math.log(n) for n, _ in points]
+    ys = [math.log(t) for _, t in points]
+    mean_x, mean_y = statistics.fmean(xs), statistics.fmean(ys)
+    denominator = sum((x - mean_x) ** 2 for x in xs)
+    if denominator == 0:
+        return None, None
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denominator
+    residual = sum((y - (mean_y + slope * (x - mean_x))) ** 2 for x, y in zip(xs, ys))
+    total = sum((y - mean_y) ** 2 for y in ys)
+    return slope, (1 - residual / total if total else None)
+
+
+def figure_exp5(plt, rows, out_dir):
+    """Runtime per indicator by pool size, against the predicted complexity.
+
+    One box per (indicator, pool-size bucket) -- whiskers span the full
+    min-max range, the notch-free box is the quartiles, the diamond is the
+    mean -- with each indicator's theoretical curve overlaid. The curve has
+    its exponent *fixed* at the predicted value and only its constant fitted
+    (least squares in log space), so the question the figure answers is
+    whether the measured slope matches the predicted one, not whether some
+    curve can be made to pass through the data.
+    """
+    from matplotlib.lines import Line2D
+
+    figure, axis = plt.subplots(figsize=(FULL_IN, 2.8))
+    offsets = [-0.26, 0.0, 0.26]
+    legend_handles = []
+
+    for slot, series in enumerate(RUNTIME_SERIES):
+        field, label = series['field'], series['label']
+        exponent, theory_label = series['exponent'], series['theory']
+        points = [(as_float(row['n_plans']), as_float(row[field])) for row in rows]
+        points = [(n, t) for n, t in points if n and t and n > 0 and t > 0]
         if not points:
             continue
-        left.scatter([n for n, _ in points], [t for _, t in points],
-                     s=4, alpha=0.35, linewidths=0, color=SERIES[slot], label=label)
-    left.set_xscale('log')
-    left.set_yscale('log')
-    left.set_xlabel('pool size n')
-    left.set_ylabel('seconds')
-    left.legend(loc='upper left', markerscale=2.5)
 
-    points = [(as_float(row['b']), as_float(row['t_bmaxsum_cold']))
-              for row in rows if as_float(row.get('t_bmaxsum_cold'))]
-    points = [(b, t) for b, t in points if b and t and t > 0]
-    if points:
-        right.scatter([b for b, _ in points], [t for _, t in points],
-                      s=4, alpha=0.35, linewidths=0, color=SERIES[1])
-        # A b^2 guide anchored at the median point, so the slope is readable.
-        med_b = statistics.median([b for b, _ in points])
-        med_t = statistics.median([t for _, t in points])
-        guide_b = [max(1, min(b for b, _ in points)), max(b for b, _ in points)]
-        right.plot(guide_b, [med_t * (g / med_b) ** 2 for g in guide_b],
-                   color=MUTED, linewidth=0.8, linestyle='--')
-        right.annotate('slope 2', xy=(guide_b[1], med_t * (guide_b[1] / med_b) ** 2),
-                       fontsize=7, color=INK_SECONDARY,
-                       textcoords='offset points', xytext=(-18, 2))
-    right.set_xscale('log')
-    right.set_yscale('log')
-    right.set_xlabel('distinct behaviours b')
-    right.set_ylabel('B-MaxSum seconds')
+        grouped, positions = [], []
+        for index, (low, high, _) in enumerate(SIZE_BUCKETS):
+            values = [t for n, t in points if low <= n <= high]
+            if values:
+                grouped.append(values)
+                positions.append(index + offsets[slot])
+        if not grouped:
+            continue
 
+        boxes = axis.boxplot(grouped, positions=positions, widths=0.22,
+                             whis=(0, 100), showmeans=True, patch_artist=True,
+                             manage_ticks=False)
+        for patch in boxes['boxes']:
+            patch.set(facecolor=SERIES[slot], alpha=0.30,
+                      edgecolor=SERIES[slot], linewidth=0.7)
+        for part in ('whiskers', 'caps'):
+            for line in boxes[part]:
+                line.set(color=SERIES[slot], linewidth=0.7)
+        for line in boxes['medians']:
+            line.set(color=INK, linewidth=0.9)
+        for marker in boxes['means']:
+            marker.set(marker='D', markersize=2.4, markerfacecolor='white',
+                       markeredgecolor=SERIES[slot], markeredgewidth=0.7)
+
+        # Theory curve: exponent fixed, constant fitted in log space.
+        constant = statistics.fmean(math.log(t) - exponent * math.log(n)
+                                    for n, t in points)
+        midpoints = [(index, statistics.geometric_mean([n for n, _ in points
+                                                        if low <= n <= high]))
+                     for index, (low, high, _) in enumerate(SIZE_BUCKETS)
+                     if any(low <= n <= high for n, _ in points)]
+        axis.plot([index for index, _ in midpoints],
+                  [math.exp(constant) * mid ** exponent for _, mid in midpoints],
+                  color=SERIES[slot], linewidth=1.0, linestyle='--', zorder=5)
+
+        # The measured exponents stay out of the figure -- they go to stdout, so
+        # the plot reads cleanly and the numbers behind the dashed curves are
+        # still recorded every time it is regenerated.
+        measured, r_squared = _log_fit_exponent(points)
+        fits = [f'n^{measured:.2f} (R2 {r_squared:.2f})']
+        # Where the stated bound is in another variable, fit that one too --
+        # otherwise dropping its panel would drop the only test of the bound.
+        if series.get('also_fit'):
+            column, symbol = series['also_fit']
+            other = [(as_float(row[column]), as_float(row[field])) for row in rows]
+            other = [(x, t) for x, t in other if x and t and x > 0 and t > 0]
+            if other:
+                slope, other_r2 = _log_fit_exponent(other)
+                fits.append(f'{symbol}^{slope:.2f} (R2 {other_r2:.2f})')
+        print(f'  exp5 {label}: predicted {theory_label_plain(theory_label)}, '
+              f'measured {"; ".join(fits)}')
+
+        legend_handles.append(Line2D([], [], color=SERIES[slot], linewidth=6,
+                                     alpha=0.45, label=label))
+
+    axis.set_yscale('log')
+    axis.set_xticks(range(len(SIZE_BUCKETS)))
+    axis.set_xticklabels([label for _, _, label in SIZE_BUCKETS])
+    axis.set_xlim(-0.6, len(SIZE_BUCKETS) - 0.4)
+    axis.set_xlabel('pool size n')
+    axis.set_ylabel('seconds')
+    axis.grid(axis='x', visible=False)
+    # Two decades of headroom so the legend never sits over a box or a curve.
+    bottom, top = axis.get_ylim()
+    axis.set_ylim(bottom, top * 10 ** 2.4)
+    legend_handles.append(Line2D([], [], color=MUTED, linewidth=1.0, linestyle='--',
+                                 label='predicted complexity, constant fitted'))
+    axis.legend(handles=legend_handles, loc='upper left', ncol=1,
+                handlelength=1.6, labelspacing=0.35, borderpad=0.2)
     save(figure, out_dir, 'exp5_runtime')
     plt.close(figure)
 

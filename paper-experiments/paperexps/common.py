@@ -148,9 +148,20 @@ def pool_has_plans(path, head_bytes=4096):
 
 
 def parse_task(domain_file, problem_file):
+    """Parse a PDDL task, tolerating names the benchmarks reuse across kinds.
+
+    unified-planning refuses by default to give two elements of a problem the
+    same name, which is stricter than PDDL itself: floortile declares both a
+    predicate and an action ``up`` (also ``down``, ``left``, ``right``) and
+    tidybot declares an object ``cart`` of type ``cart``. Both are standard IPC
+    benchmarks, and rejecting them costs 95 pools of the sweep, so the check is
+    disabled -- the exception message itself names this flag as the remedy.
+    """
     from unified_planning.io import PDDLReader
     import unified_planning.shortcuts as ups
-    ups.get_environment().credits_stream = None
+    environment = ups.get_environment()
+    environment.credits_stream = None
+    environment.error_used_name = False
     return PDDLReader().parse_problem(domain_file, problem_file)
 
 
@@ -172,6 +183,36 @@ def _fd_name_map(names):
     return {key: name for key, name in mapping.items() if key not in ambiguous}
 
 
+FD_SUFFIX_RE = re.compile(r'_\d+$')
+
+
+def _resolve_name(name, known):
+    """The task's name for a plan token, or the token unchanged.
+
+    Beyond lowercasing and ``-``/``_``, Fast Downward appends ``_<n>`` to a
+    name for two unrelated reasons, and the pools store the suffixed names:
+
+    - to disambiguate a name that collides with another kind's -- floortile's
+      action ``up`` clashes with its predicate ``up`` and becomes ``up_0``,
+      tidybot's object ``cart`` clashes with its type ``cart`` and becomes
+      ``cart_0``;
+    - to name the pieces of an action it *split* because the precondition was
+      disjunctive (trucks' ``load`` becomes ``load_1``, ``load_2``, ...;
+      likewise openstacks and pathways).
+
+    Both collapse back to the one PDDL name safely. The split is sound by
+    construction -- Fast Downward splits precondition ``A or B`` into variants
+    requiring ``A`` and requiring ``B``, over the same parameters and effects,
+    so anything a variant permits the original permits too. The suffix is only
+    stripped when the direct lookup misses *and* the stripped name is itself
+    known, so a name genuinely ending in ``_1`` (``pos_3_2``, ``load_1`` as a
+    real action) always wins, and a typo is left alone to fail loudly.
+    """
+    if name in known:
+        return known[name]
+    return known.get(FD_SUFFIX_RE.sub('', name), name)
+
+
 def _denormalise_plan_text(task, text, _cache={}):
     """Rewrite a Fast Downward-normalised plan back to the task's own names."""
     if id(task) not in _cache:
@@ -188,8 +229,8 @@ def _denormalise_plan_text(task, text, _cache={}):
             lines.append(line)
             continue
         tokens = stripped.strip('()').split()
-        rewritten = [actions.get(tokens[0], tokens[0])] + \
-                    [objects.get(token, token) for token in tokens[1:]]
+        rewritten = [_resolve_name(tokens[0], actions)] + \
+                    [_resolve_name(token, objects) for token in tokens[1:]]
         lines.append('(' + ' '.join(rewritten) + ')')
     return '\n'.join(lines)
 
