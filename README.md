@@ -116,8 +116,8 @@ a `SequentialSimulator`, and each dimension turns the resulting state trace into
 The tokens are joined with ` $$ ` into one behaviour string per plan, which is attached
 to the plan object as `plan.behaviour` and cached by plan identity — a plan is simulated
 at most once per counter, however many sets it appears in. Pairwise behaviour distances
-are memoised the same way, so repeated indicator calls and the greedy extraction never
-recompute a distance they have already seen.
+are memoised on the unordered pair, so repeated indicator calls and the greedy extraction
+never recompute a distance they have already seen.
 
 ## Dimensions
 
