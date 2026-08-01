@@ -3,10 +3,10 @@ import os
 from collections import defaultdict
 from itertools import chain, combinations
 from lark import Lark, Transformer, v_args
-from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
 
-class ResourceCountSimulator(DimensionConstructorSimulator):
+class ResourceCountDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'rc', {'resources_list': parse_resource_file(addinfo)})
         self.addinfo['objects'] = set(map(str,filter(lambda e: e.name in set(map(lambda e: e['name'], self.addinfo['resources_list'].values())), self.task.all_objects)))
@@ -27,10 +27,10 @@ class ResourceCountSimulator(DimensionConstructorSimulator):
         return f'{self.name}:' + counts
 
     def distance(self, plan1, plan2):
-        assert False, 'Distance function is not implemented for ResourceCountSimulator.'
+        assert False, 'Distance function is not implemented for ResourceCountDimension.'
     
 
-class ResourceUsedSimulator(DimensionConstructorSimulator):
+class ResourceUsedDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'ru', {'resources_list': parse_resource_file(addinfo)})
         self.addinfo['objects'] = set(map(str,filter(lambda e: e.name in set(map(lambda e: e['name'], self.addinfo['resources_list'].values())), self.task.all_objects)))

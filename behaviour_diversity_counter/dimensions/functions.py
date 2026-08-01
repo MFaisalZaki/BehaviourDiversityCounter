@@ -3,9 +3,9 @@ import os
 
 from collections import defaultdict
 from lark import Lark, Transformer, v_args
-from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
-class FunctionsSimulator(DimensionConstructorSimulator):
+class NumericFunctionDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'function_value', parse_functions_file(addinfo))
     

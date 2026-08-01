@@ -1,0 +1,10 @@
+--- /ibm-diversescore/src/search/options/option_parser.h	2026-05-04 15:33:19.028336353 +0100
++++ /ibm-diversescore/src/search/options/option_parser.h	2026-05-04 15:34:13.652108034 +0100
+@@ -13,6 +13,7 @@
+ #include <sstream>
+ #include <string>
+ #include <vector>
++#include <limits>
+ 
+ namespace options {
+ /*

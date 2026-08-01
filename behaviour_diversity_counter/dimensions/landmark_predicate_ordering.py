@@ -1,8 +1,8 @@
 import math
 from collections import defaultdict
-from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
-class LandmarkPredicatesOrderingSimulator(DimensionConstructorSimulator):
+class LandmarkPredicatesOrderingDimension(BehaviourDimension):
     def __init__(self, task, name, addinfo=None):
         super().__init__(task, name, addinfo)
         from unified_planning.model.walkers.free_vars import FreeVarsExtractor

@@ -1,8 +1,8 @@
 from itertools import chain, combinations
 from collections import defaultdict
-from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
-class UtilityValueSimulator(DimensionConstructorSimulator):
+class UtilityValueDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'utility_value', addinfo)
         from unified_planning.model.walkers.free_vars import FreeVarsExtractor

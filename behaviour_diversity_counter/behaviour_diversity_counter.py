@@ -1,19 +1,19 @@
 from collections import defaultdict
 from unified_planning.shortcuts import SequentialSimulator
 
-from behaviour_diversity_counter.features.goal_predicate_ordering import GoalPredicatesOrderingSimulator
-from behaviour_diversity_counter.features.cost_bound_makespan_optimal import MakespanOptimalCostSimulator
-from behaviour_diversity_counter.features.resources import ResourceCountSimulator, ResourceUsedSimulator
-from behaviour_diversity_counter.features.utility_value import UtilityValueSimulator
-from behaviour_diversity_counter.features.functions import FunctionsSimulator
+from behaviour_diversity_counter.dimensions.goal_predicate_ordering import GoalPredicatesOrderingDimension
+from behaviour_diversity_counter.dimensions.cost_bound_makespan_optimal import MakespanOptimalCostDimension
+from behaviour_diversity_counter.dimensions.resources import ResourceCountDimension, ResourceUsedDimension
+from behaviour_diversity_counter.dimensions.utility_value import UtilityValueDimension
+from behaviour_diversity_counter.dimensions.functions import NumericFunctionDimension
 
-features_map = {
-    'go': GoalPredicatesOrderingSimulator,
-    'cb': MakespanOptimalCostSimulator,
-    'rc': ResourceCountSimulator,
-    'ru': ResourceUsedSimulator,
-    'uv': UtilityValueSimulator,
-    'fn': FunctionsSimulator
+dimensions_map = {
+    'go': GoalPredicatesOrderingDimension,
+    'cb': MakespanOptimalCostDimension,
+    'rc': ResourceCountDimension,
+    'ru': ResourceUsedDimension,
+    'uv': UtilityValueDimension,
+    'fn': NumericFunctionDimension
 }
 
 class InapplicablePlanError(ValueError):
@@ -25,10 +25,10 @@ class InapplicablePlanError(ValueError):
     """
 
 class BehaviourDiversityCounter:
-    def __init__(self, task, planlist, f):
-        self.task      = task
-        self.planslist = list(planlist)
-        self.features  = {feat_name: features_map[feat_name](task, addinfo) for feat_name, addinfo in f}
+    def __init__(self, task, planlist, dimensions):
+        self.task       = task
+        self.planslist  = list(planlist)
+        self.dimensions = {name: dimensions_map[name](task, addinfo) for name, addinfo in dimensions}
         self.collected_behaviours = set()
         self.estimated_behaviours = set()
         self._estimated_behaviour_count = -1
@@ -52,7 +52,7 @@ class BehaviourDiversityCounter:
     
     def _extract_behaviour_(self, plan, states):
         setattr(plan, 'states', states)
-        return ' $$ '.join([dim.plan_behaviour(plan) for name, dim in self.features.items()])
+        return ' $$ '.join([dim.plan_behaviour(plan) for name, dim in self.dimensions.items()])
 
     def count(self):
         if len(self.collected_behaviours) == 0: self.optimise(k=len(self.planslist))
@@ -79,18 +79,18 @@ class BehaviourDiversityCounter:
         
         # estimate the maximum behaviour count.
         self._estimated_behaviour_count = 1
-        for f, feature in self.features.items():
-            feature._estimate_domain()
-            self._estimated_behaviour_count *= feature.estimated_domain_size
+        for name, dimension in self.dimensions.items():
+            dimension._estimate_domain()
+            self._estimated_behaviour_count *= dimension.estimated_domain_size
             
         return _ret_plans
     
     def estimated_behaviour_count(self):
         return self._estimated_behaviour_count
     
-    def compute_novelty_score(self):
+    def compute_b_maxsum_metric(self):
         def pair_distance(b1, b2):
-            return sum(f.distance(b1, b2) for f in self.features.values()) / len(self.features) if len(self.features) > 0 else 0.0
+            return sum(d.distance(b1, b2) for d in self.dimensions.values()) / len(self.dimensions) if len(self.dimensions) > 0 else 0.0
         
         _behaviours = [self._infer_plan_behaviour(p) for p in self.planslist]
         n = len(_behaviours)

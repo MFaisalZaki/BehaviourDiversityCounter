@@ -14,7 +14,8 @@ From a set of plans you can then get:
 - `estimated_behaviour_count()` — how many the task could admit (see the caveat under
   Known issues before relying on it as an upper bound).
 - `optimise(k)` — pick `k` plans spreading across as many behaviours as possible.
-- `compute_novelty_score()` — mean pairwise distance between behaviours, in `[0, 1]`.
+- `compute_b_maxsum_metric()` — the B-MaxSum metric: mean pairwise distance between
+  behaviours, in `[0, 1]`.
 
 Plans are replayed against the task, so they must be applicable to it: a plan whose
 preconditions fail raises `InapplicablePlanError` rather than being counted.
@@ -85,7 +86,7 @@ counter.count()                      # 2
 counter.collected_behaviours         # {'go:delivered(l1)->delivered(l2)',
                                      #  'go:delivered(l2)->delivered(l1)'}
 counter.estimated_behaviour_count()  # 2   -- 2 goals admit 2! orderings
-counter.compute_novelty_score()      # 1.0 -- every position differs
+counter.compute_b_maxsum_metric()    # 1.0 -- every position differs
 counter.optimise(k=1)                # one plan, covering one behaviour
 ```
 
@@ -96,14 +97,14 @@ diversity for your problem.
 ## Constructing the counter
 
 ```python
-BehaviourDiversityCounter(task, planlist, f)
+BehaviourDiversityCounter(task, planlist, dimensions)
 ```
 
 | argument | meaning |
 | --- | --- |
 | `task` | the `unified_planning` `Problem` the plans were built for |
 | `planlist` | any iterable of `SequentialPlan`; it is materialised into a list |
-| `f` | an iterable of `(dimension_key, addinfo)` pairs — see below |
+| `dimensions` | an iterable of `(dimension_key, addinfo)` pairs — see below |
 
 Each plan is replayed through a `SequentialSimulator`, and each dimension turns the
 resulting state trace into a token. The tokens are joined with ` $$ ` into one behaviour
@@ -113,18 +114,18 @@ string per plan, which is also attached to the plan object as `plan.behaviour`.
 
 | key | class | `addinfo` | example token |
 | --- | --- | --- | --- |
-| `go` | `GoalPredicatesOrderingSimulator` | `None` | `go:delivered(l1)->delivered(l2)` |
-| `cb` | `MakespanOptimalCostSimulator` | `{'q': 1.5}` | `cb:4` |
-| `rc` | `ResourceCountSimulator` | path to a `(:resource ...)` file | `rc:tr1=4,tr2=0` |
-| `ru` | `ResourceUsedSimulator` | path to a `(:resource ...)` file | `ru:tr1,tr2` |
-| `uv` | `UtilityValueSimulator` | `{'utility-goals': {expr: int}}` | `utility_value:8 -- delivered(l1)=5,delivered(l2)=3` |
-| `fn` | `FunctionsSimulator` | path to a `(:function ...)` file | `fuel:8` |
+| `go` | `GoalPredicatesOrderingDimension` | `None` | `go:delivered(l1)->delivered(l2)` |
+| `cb` | `MakespanOptimalCostDimension` | `{'q': 1.5}` | `cb:4` |
+| `rc` | `ResourceCountDimension` | path to a `(:resource ...)` file | `rc:tr1=4,tr2=0` |
+| `ru` | `ResourceUsedDimension` | path to a `(:resource ...)` file | `ru:tr1,tr2` |
+| `uv` | `UtilityValueDimension` | `{'utility-goals': {expr: int}}` | `utility_value:8 -- delivered(l1)=5,delivered(l2)=3` |
+| `fn` | `NumericFunctionDimension` | path to a `(:function ...)` file | `fuel:8` |
 
 **`go` — goal ordering.** The order in which the goal predicates first become true.
 Its estimate is `len(goals)!`. Goals never achieved sort to the front (index `-1`).
-`GoalPredicatesOrderingSimulator` is a thin specialisation of
-`LandmarkPredicatesOrderingSimulator`, which can order any predicate set; only the goal
-variant is wired into `features_map`.
+`GoalPredicatesOrderingDimension` is a thin specialisation of
+`LandmarkPredicatesOrderingDimension`, which can order any predicate set; only the goal
+variant is wired into `dimensions_map`.
 
 **`cb` — cost / makespan.** Plan length. `q` is the bound relative to the cheapest plan
 seen: `q = 1.0` means optimal-only (estimate `1`), `q = 1.5` admits costs up to
@@ -174,9 +175,9 @@ by `min`, `max` and `delta`; names may be parenthesised (`fuel(tr1)`).
 For `fn`, `delta` is the bin width: a value is reported as the index of the bin it lands
 in, so `fuel = 80` over `0..100` step `10` becomes bin `8`.
 
-## Novelty score
+## B-MaxSum metric
 
-`compute_novelty_score()` averages, over every unordered pair of plans, the mean of the
+`compute_b_maxsum_metric()` averages, over every unordered pair of plans, the mean of the
 per-dimension `distance()` values. It returns `0.0` for fewer than two plans or no
 dimensions.
 
@@ -189,12 +190,12 @@ averaged together:
 | `cb` | `abs(c1 - c2) / max(c1, c2)` over the two plan costs |
 | `ru` | Jaccard complement — `1 - |A ∩ B| / |A ∪ B|` — over the used sets |
 
-`rc`, `uv` and `fn` do not implement one and raise `AssertionError`, so a novelty score can
-only be computed over feature sets drawn from `go`, `cb` and `ru`.
+`rc`, `uv` and `fn` do not implement one and raise `AssertionError`, so the B-MaxSum metric
+can only be computed over dimension sets drawn from `go`, `cb` and `ru`.
 
 ## Known issues
 
-**The `uv` estimate is not a true upper bound.** `UtilityValueSimulator._estimate_domain`
+**The `uv` estimate is not a true upper bound.** `UtilityValueDimension._estimate_domain`
 builds each candidate as `sum -- <all declared utilities>`, and that second part is
 identical for every subset, so the set collapses to the distinct achievable *sums*. But
 `plan_behaviour` encodes *which* goals were achieved, which distinguishes subsets that
@@ -212,16 +213,16 @@ multiplies across dimensions, a low `uv` estimate drags the whole product below 
 count. Fixing it means encoding candidates the way `plan_behaviour` does, and deciding
 whether the empty subset counts as a behaviour.
 
-**Novelty is only defined over `go`, `cb` and `ru`.** The other three dimensions have no
-`distance()` and raise `AssertionError` — see the Novelty score section.
+**B-MaxSum is only defined over `go`, `cb` and `ru`.** The other three dimensions have no
+`distance()` and raise `AssertionError` — see the B-MaxSum metric section.
 
 ### Fixed
 
 - **`fn` was unusable.** Its parser inverted `min` and `max` against the grammar order,
   crashing `plan_behaviour` with `IndexError`; and `plan_behaviour` returned
   `','.join(val)` over an already-joined string, yielding `'f,u,e,l,:,8'` for `'fuel:8'`.
-- **Novelty crashed on `cb`.** `distance()` read `.actions` off its arguments, expecting
-  plan objects, while `compute_novelty_score` passes behaviour strings. It now parses its
+- **B-MaxSum crashed on `cb`.** `distance()` read `.actions` off its arguments, expecting
+  plan objects, while `compute_b_maxsum_metric` passes behaviour strings. It now parses its
   own token and normalises into `[0, 1]`.
 - **`rc` tokens were ambiguous.** Counts were joined with ` $$ `, the separator used
   *between* dimensions, with no `rc:` prefix. They are now one prefixed, comma-separated,
@@ -243,10 +244,10 @@ poetry run pytest
 ```
 
 ```
-tests/conftest.py       a tiny transport task, hand-checkable behaviour strings
-tests/test_parsers.py   the (:resource ...) / (:function ...) file parsers
-tests/test_features.py  each dimension: tokens, domains, estimates, distances
-tests/test_counter.py   count / optimise / estimate / novelty, and edge cases
+tests/conftest.py         a tiny transport task, hand-checkable behaviour strings
+tests/test_parsers.py     the (:resource ...) / (:function ...) file parsers
+tests/test_dimensions.py  each dimension: tokens, domains, estimates, distances
+tests/test_counter.py     count / optimise / estimate / B-MaxSum, and edge cases
 ```
 
 The expected strings are worked out by hand from the fixture task rather than recorded from

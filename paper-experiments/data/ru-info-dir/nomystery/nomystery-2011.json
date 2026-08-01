@@ -1,0 +1,28 @@
+{
+    "info": {
+        "domain": "nomystery",
+        "year": "2011"
+    },
+    "instances": {
+        "1": "(:resource t0 100 0 5)",
+        "2": "(:resource t0 100 0 5)",
+        "3": "(:resource t0 100 0 5)",
+        "4": "(:resource t0 100 0 5)",
+        "5": "(:resource t0 100 0 5)",
+        "6": "(:resource t0 100 0 5)",
+        "7": "(:resource t0 100 0 5)",
+        "8": "(:resource t0 100 0 5)",
+        "9": "(:resource t0 100 0 5)",
+        "10": "(:resource t0 100 0 5)",
+        "11": "(:resource t0 100 0 5)",
+        "12": "(:resource t0 100 0 5)",
+        "13": "(:resource t0 100 0 5)",
+        "14": "(:resource t0 100 0 5)",
+        "15": "(:resource t0 100 0 5)",
+        "16": "(:resource t0 100 0 5)",
+        "17": "(:resource t0 100 0 5)",
+        "18": "(:resource t0 100 0 5)",
+        "19": "(:resource t0 100 0 5)",
+        "20": "(:resource t0 100 0 5)"
+    }
+}

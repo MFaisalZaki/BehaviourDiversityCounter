@@ -61,7 +61,7 @@ def domain():
     problem.set_initial_value(at(objects['tr1'], objects['l0']), True)
     problem.set_initial_value(at(objects['tr2'], objects['l0']), True)
 
-    # Goal order matters: features derive their variable order from problem.goals.
+    # Goal order matters: dimensions derive their variable order from problem.goals.
     problem.add_goal(delivered(objects['l1']))
     problem.add_goal(delivered(objects['l2']))
 
@@ -161,6 +161,6 @@ def function_file(tmp_path):
 
 @pytest.fixture
 def utility_goals(domain):
-    """Utility weights keyed by goal expression, as UtilityValueSimulator expects."""
+    """Utility weights keyed by goal expression, as UtilityValueDimension expects."""
     delivered, l1, l2 = domain['delivered'], domain['l1'], domain['l2']
     return {'utility-goals': {delivered(l1): 5, delivered(l2): 3}}

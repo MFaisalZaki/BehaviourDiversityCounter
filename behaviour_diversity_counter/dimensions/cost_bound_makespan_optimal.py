@@ -1,12 +1,12 @@
-from behaviour_diversity_counter.features.base import DimensionConstructorSimulator
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
-class MakespanOptimalCostSimulator(DimensionConstructorSimulator):
+class MakespanOptimalCostDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'cb', addinfo)
     
     def _estimate_domain(self):
         _q_value = self.addinfo.get('q', None)
-        assert _q_value is not None, 'The q value should be provided for the cost bound feature.'
+        assert _q_value is not None, 'The q value should be provided for the cost bound dimension.'
         if _q_value == 1.0:
             self.estimated_domain_size = 1
             return
@@ -27,7 +27,7 @@ class MakespanOptimalCostSimulator(DimensionConstructorSimulator):
 
     def distance(self, plan1, plan2):
         # Takes behaviour strings, like every other dimension: this is what
-        # BehaviourDiversityCounter.compute_novelty_score passes in.
+        # BehaviourDiversityCounter.compute_b_maxsum_metric passes in.
         cost1, cost2 = self._cost(plan1), self._cost(plan2)
         if max(cost1, cost2) == 0:
             return 0.0

@@ -1,0 +1,28 @@
+{
+    "info": {
+        "domain": "hiking",
+        "year": "2014"
+    },
+    "instances": {
+        "1": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "2": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "3": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "4": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "5": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "6": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "7": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "8": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "9": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "10": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "11": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)",
+        "12": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)",
+        "13": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)",
+        "14": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)",
+        "15": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)",
+        "16": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)\n(:resource car3 100 0 5)",
+        "17": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)\n(:resource car3 100 0 5)",
+        "18": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)\n(:resource car3 100 0 5)",
+        "19": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)\n(:resource car3 100 0 5)",
+        "20": "(:resource car0 100 0 5)\n(:resource car1 100 0 5)\n(:resource car2 100 0 5)\n(:resource car3 100 0 5)"
+    }
+}

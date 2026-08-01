@@ -2,8 +2,8 @@
 
 import pytest
 
-from behaviour_diversity_counter.features.functions import parse_functions_file
-from behaviour_diversity_counter.features.resources import parse_resource_file
+from behaviour_diversity_counter.dimensions.functions import parse_functions_file
+from behaviour_diversity_counter.dimensions.resources import parse_resource_file
 
 
 class TestParseResourceFile:

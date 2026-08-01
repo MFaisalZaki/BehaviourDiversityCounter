@@ -1,0 +1,28 @@
+{
+    "info": {
+        "domain": "gripper",
+        "year": "1998"
+    },
+    "instances": {
+        "1": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "2": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "3": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "4": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "5": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "6": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "7": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "8": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "9": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "10": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "11": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "12": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "13": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "14": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "15": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "16": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "17": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "18": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "19": "(:resource left 100 0 5)\n(:resource right 100 0 5)",
+        "20": "(:resource left 100 0 5)\n(:resource right 100 0 5)"
+    }
+}

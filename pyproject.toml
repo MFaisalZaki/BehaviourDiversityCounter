@@ -7,7 +7,9 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+# Capped below 3.14: unified-planning pulls in scipy, which has no 3.14+ wheels
+# and fails to build from source there.
+python = ">=3.10,<3.14"
 # The only two packages the library imports.
 unified-planning = "^1.3.0"
 lark = "^1.1.9"

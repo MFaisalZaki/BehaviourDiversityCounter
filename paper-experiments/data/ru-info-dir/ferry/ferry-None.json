@@ -1,0 +1,38 @@
+{
+    "info": {
+        "domain": "ferry",
+        "year": "None"
+    },
+    "instances": {
+        "1": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "2": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "3": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "4": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "5": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)",
+        "6": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "7": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "8": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "9": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "10": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)",
+        "11": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "12": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "13": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "14": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "15": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)",
+        "16": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "17": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "18": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "19": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "20": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)",
+        "21": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "22": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "23": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "24": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "25": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)",
+        "26": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)",
+        "27": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)",
+        "28": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)",
+        "29": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)",
+        "30": "(:resource c0 100 0 5)\n(:resource c1 100 0 5)\n(:resource c2 100 0 5)\n(:resource c3 100 0 5)\n(:resource c4 100 0 5)\n(:resource c5 100 0 5)\n(:resource c6 100 0 5)\n(:resource c7 100 0 5)\n(:resource c8 100 0 5)"
+    }
+}

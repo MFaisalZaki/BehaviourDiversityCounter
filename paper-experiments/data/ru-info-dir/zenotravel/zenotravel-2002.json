@@ -1,0 +1,28 @@
+{
+    "info": {
+        "domain": "zenotravel",
+        "year": "2002"
+    },
+    "instances": {
+        "1": "(:resource plane1 100 0 5)",
+        "2": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)",
+        "3": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)",
+        "4": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)",
+        "5": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)",
+        "6": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "7": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "8": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "9": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "10": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "11": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "12": "(:resource plane1 100 0 5)",
+        "13": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)\n(:resource plane4 100 0 5)\n(:resource plane5 100 0 5)",
+        "14": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)",
+        "15": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)",
+        "16": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)",
+        "17": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)",
+        "18": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)",
+        "19": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)",
+        "20": "(:resource plane1 100 0 5)\n(:resource plane2 100 0 5)\n(:resource plane3 100 0 5)"
+    }
+}

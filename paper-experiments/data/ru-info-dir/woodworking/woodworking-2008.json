@@ -1,0 +1,38 @@
+{
+    "info": {
+        "domain": "woodworking",
+        "year": "2008"
+    },
+    "instances": {
+        "1": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "2": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "3": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "4": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "5": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "6": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "7": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "8": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "9": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "10": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "11": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "12": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "13": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "14": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "15": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "16": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "17": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "18": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "19": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "20": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "21": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "22": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "23": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "24": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "25": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "26": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "27": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "28": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "29": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)",
+        "30": "(:resource grinder0 100 0 5)\n(:resource spray-varnisher0 100 0 5)\n(:resource planer0 100 0 5)\n(:resource glazer0 100 0 5)\n(:resource saw0 100 0 5)\n(:resource immersion-varnisher0 100 0 5)\n(:resource highspeed-saw0 100 0 5)"
+    }
+}

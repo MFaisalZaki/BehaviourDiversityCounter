@@ -1,0 +1,28 @@
+{
+    "info": {
+        "domain": "tidybot",
+        "year": "2011"
+    },
+    "instances": {
+        "1": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "2": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "3": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "4": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "5": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "6": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "7": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "8": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "9": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "10": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "11": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "12": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "13": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "14": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "15": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "16": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "17": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "18": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "19": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)",
+        "20": "(:resource pr2 100 0 5)\n(:resource cart 100 0 5)"
+    }
+}

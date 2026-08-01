@@ -1,5 +1,5 @@
 
-class DimensionConstructorSimulator:
+class BehaviourDimension:
     def __init__(self, task, name, addinfo):
         self.task = task
         self.name = name
