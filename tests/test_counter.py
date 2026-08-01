@@ -304,6 +304,36 @@ class TestBMaxSum:
             counter.b_maxsum([plan_l1_then_l2, plan_two_trucks])
 
 
+class TestCaching:
+    def test_a_plan_is_simulated_once_per_counter(self, task, plan_l1_then_l2):
+        counter = BehaviourDiversityCounter(task, [('go', None)])
+        simulations = []
+        original = counter._simulate
+        counter._simulate = lambda plan: (simulations.append(plan), original(plan))[1]
+
+        counter.bdc([plan_l1_then_l2])
+        counter.b_maxsum([plan_l1_then_l2])
+        counter.extract([plan_l1_then_l2], k=1)
+
+        assert len(simulations) == 1
+
+    def test_pair_distances_are_computed_once_per_behaviour_pair(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        counter = BehaviourDiversityCounter(task, [('go', None)])
+        calls = []
+        dimension = counter.dimensions['go']
+        original = dimension.distance
+        dimension.distance = lambda b1, b2: (calls.append((b1, b2)), original(b1, b2))[1]
+        plans = [plan_l1_then_l2, plan_l2_then_l1]
+
+        counter.b_maxsum(plans)
+        counter.b_maxsum(plans)
+        counter.extract(plans, k=2, indicator='bmaxsum')
+
+        assert len(calls) == 1
+
+
 class TestInapplicablePlans:
     """Regression: _simulate used to return [] for a plan whose preconditions fail.
     The dimensions read that empty trace as "no goal was ever achieved", so under go

@@ -33,6 +33,7 @@ class BehaviourDiversityCounter:
             self.dimensions[name] = dimensions_map[name](task, addinfo)
         self._simulator = SequentialSimulator(problem=task)
         self._behaviour_cache = {}
+        self._distance_cache = {}
 
     def behaviours(self, plans):
         """The distinct behaviours exhibited by the given plans."""
@@ -109,18 +110,26 @@ class BehaviourDiversityCounter:
         # distance to the behaviours already selected. The first pick is arbitrary
         # (singleton sets score zero), and duplicates gain nothing, so they are only
         # picked once every remaining candidate repeats a selected behaviour.
+        # Each candidate's gain is accumulated as behaviours join the selection,
+        # rather than being re-summed over the whole selection every round.
         remaining = list(range(len(plans)))
-        chosen, selected = [], []
+        chosen, selected = [], set()
+        gains = [0.0] * len(plans)
         while remaining and len(chosen) < k:
-            def gain(idx):
-                b = behaviours[idx]
-                return 0.0 if b in selected else sum(self._pair_distance(b, other) for other in selected)
-            best = max(remaining, key=gain)
+            best = max(remaining, key=lambda idx: 0.0 if behaviours[idx] in selected else gains[idx])
             remaining.remove(best)
             chosen.append(best)
             if behaviours[best] not in selected:
-                selected.append(behaviours[best])
+                selected.add(behaviours[best])
+                for idx in remaining:
+                    gains[idx] += self._pair_distance(behaviours[idx], behaviours[best])
         return [plans[idx] for idx in chosen]
 
     def _pair_distance(self, b1, b2):
-        return sum(d.distance(b1, b2) for d in self.dimensions.values()) / len(self.dimensions) if len(self.dimensions) > 0 else 0.0
+        # Distances are symmetric, so the pair is cached unordered.
+        if len(self.dimensions) == 0:
+            return 0.0
+        key = (b1, b2) if b1 <= b2 else (b2, b1)
+        if key not in self._distance_cache:
+            self._distance_cache[key] = sum(d.distance(b1, b2) for d in self.dimensions.values()) / len(self.dimensions)
+        return self._distance_cache[key]
