@@ -201,3 +201,6 @@ v-env/
 dev.py
 ibm-diversescore/
 *.error
+# paper-experiments: generated/downloaded data (the zip is the source of truth)
+paper-experiments/data/fi-generated-plans-dir/
+paper-experiments/data/classical-domains/
