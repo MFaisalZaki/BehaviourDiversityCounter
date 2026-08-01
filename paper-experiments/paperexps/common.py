@@ -88,14 +88,39 @@ def task_files(pool_info, classical_domains_root):
     return domain_file, problem_file
 
 
+def _resource_index(ru_info_dir, _cache={}):
+    """Every ru-info file's instances, keyed by the (domain, year) it declares.
+
+    Indexed by the ``info`` block *inside* each JSON, not by file name --
+    catalog-run-2's convention (``_get_resources_details``). Most files happen
+    to be named ``{domain}-{year}.json``, but not all (``agricola-opt18.json``
+    declares domain agricola, year 2018), so the file name is never trusted.
+    """
+    root = os.path.abspath(ru_info_dir)
+    if root not in _cache:
+        index = {}
+        for folder, _dirs, files in os.walk(root):
+            for name in files:
+                if not name.endswith('.json'):
+                    continue
+                try:
+                    with open(os.path.join(folder, name)) as handle:
+                        declared = json.load(handle)
+                except (json.JSONDecodeError, OSError):
+                    continue
+                info = declared.get('info') or {}
+                key = (str(info.get('domain')), str(info.get('year')))
+                index[key] = declared.get('instances') or {}
+        _cache[root] = index
+    return _cache[root]
+
+
 def load_resources(ru_info_dir, domain, year, inst):
     """The ``(:resource ...)`` declaration string for one instance, or None."""
-    path = os.path.join(ru_info_dir, domain, f'{domain}-{year}.json')
-    if not os.path.exists(path):
+    if not os.path.isdir(ru_info_dir):
         return None
-    with open(path) as handle:
-        declared = json.load(handle)
-    return declared.get('instances', {}).get(str(inst))
+    instances = _resource_index(ru_info_dir).get((str(domain), str(year)), {})
+    return instances.get(str(inst))
 
 
 def load_pool(path):
