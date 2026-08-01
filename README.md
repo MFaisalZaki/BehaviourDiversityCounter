@@ -10,12 +10,13 @@ agree on every dimension are one behaviour, however different their action seque
 
 From a set of plans you can then get:
 
-- `count()` — how many distinct behaviours the set actually covers.
-- `estimated_behaviour_count()` — how many the task could admit (see the caveat under
-  Known issues before relying on it as an upper bound).
-- `optimise(k)` — pick `k` plans spreading across as many behaviours as possible.
-- `compute_b_maxsum_metric()` — the B-MaxSum metric: mean pairwise distance between
-  behaviours, in `[0, 1]`.
+- `bdc()` — the Behaviour Diversity Count indicator: how many distinct behaviours the
+  set actually covers.
+- `b_maxsum()` — the B-MaxSum indicator: sum of pairwise distances between the distinct
+  behaviours.
+- `extract(k, indicator=...)` — select `k` plans maximising either indicator, `'bdc'`
+  (default) or `'bmaxsum'` — see Extracting diverse subsets.
+- `behaviours` — the set of distinct behaviour strings the plans exhibit.
 
 Plans are replayed against the task, so they must be applicable to it: a plan whose
 preconditions fail raises `InapplicablePlanError` rather than being counted.
@@ -41,7 +42,7 @@ the same environment.
 ```python
 from unified_planning.shortcuts import *
 from unified_planning.plans import SequentialPlan, ActionInstance
-from behaviour_diversity_counter.behaviour_diversity_counter import BehaviourDiversityCounter
+from behaviour_diversity_counter import BehaviourDiversityCounter
 
 # A task: deliver to l1 and l2 using truck tr1.
 Location, Truck = UserType('Location'), UserType('Truck')
@@ -82,12 +83,11 @@ l2_first = plan((move, (tr1, l0, l2)), (drop, (tr1, l2)),
 
 counter = BehaviourDiversityCounter(task, [l1_first, l2_first], [('go', None)])
 
-counter.count()                      # 2
-counter.collected_behaviours         # {'go:delivered(l1)->delivered(l2)',
-                                     #  'go:delivered(l2)->delivered(l1)'}
-counter.estimated_behaviour_count()  # 2   -- 2 goals admit 2! orderings
-counter.compute_b_maxsum_metric()    # 1.0 -- every position differs
-counter.optimise(k=1)                # one plan, covering one behaviour
+counter.bdc()         # 2
+counter.behaviours    # {'go:delivered(l1)->delivered(l2)',
+                      #  'go:delivered(l2)->delivered(l1)'}
+counter.b_maxsum()    # 1.0 -- one pair of behaviours, fully reordered
+counter.extract(k=1)  # one plan, covering one behaviour
 ```
 
 Both plans cost the same and use the same truck, so under `('cb', ...)` or `('ru', ...)`
@@ -97,13 +97,13 @@ diversity for your problem.
 ## Constructing the counter
 
 ```python
-BehaviourDiversityCounter(task, planlist, dimensions)
+BehaviourDiversityCounter(task, plans, dimensions)
 ```
 
 | argument | meaning |
 | --- | --- |
 | `task` | the `unified_planning` `Problem` the plans were built for |
-| `planlist` | any iterable of `SequentialPlan`; it is materialised into a list |
+| `plans` | any iterable of `SequentialPlan`; it is materialised into a list |
 | `dimensions` | an iterable of `(dimension_key, addinfo)` pairs — see below |
 
 Each plan is replayed through a `SequentialSimulator`, and each dimension turns the
@@ -177,9 +177,11 @@ in, so `fuel = 80` over `0..100` step `10` becomes bin `8`.
 
 ## B-MaxSum metric
 
-`compute_b_maxsum_metric()` averages, over every unordered pair of plans, the mean of the
-per-dimension `distance()` values. It returns `0.0` for fewer than two plans or no
-dimensions.
+`b_maxsum()` discards duplicate behaviours, then sums the distance over
+every unordered pair of the distinct behaviours that remain. A pair's distance is the
+mean of the per-dimension `distance()` values, so each pair scores in `[0, 1]` — but the
+metric is a sum over pairs, not an average, so it grows with the number of distinct
+behaviours and can exceed `1`. Fewer than two distinct behaviours score `0.0`.
 
 Three dimensions implement `distance()`, each normalised into `[0, 1]` so they can be
 averaged together:
@@ -193,25 +195,34 @@ averaged together:
 `rc`, `uv` and `fn` do not implement one and raise `AssertionError`, so the B-MaxSum metric
 can only be computed over dimension sets drawn from `go`, `cb` and `ru`.
 
+## Extracting diverse subsets
+
+`extract(k, indicator=...)` selects `k` plans from the pool, maximising the chosen
+indicator:
+
+- `'bdc'` (default) scans the pool in order and takes a plan only when its behaviour has
+  not been seen yet. Once every behaviour is covered, the remaining slots are filled with
+  duplicates, which leave the indicator unchanged.
+- `'bmaxsum'` is greedy: it repeatedly adds the plan whose behaviour has the greatest
+  summed distance to the behaviours already selected. The first pick is arbitrary, since
+  singleton sets score zero, and duplicates gain nothing, so they are only picked once
+  every remaining candidate repeats a selected behaviour. Like the metric itself, it is
+  only defined over `go`, `cb` and `ru`.
+
 ## Known issues
 
-**The `uv` estimate is not a true upper bound.** `UtilityValueDimension._estimate_domain`
-builds each candidate as `sum -- <all declared utilities>`, and that second part is
-identical for every subset, so the set collapses to the distinct achievable *sums*. But
-`plan_behaviour` encodes *which* goals were achieved, which distinguishes subsets that
-share a sum. Two goals worth `5` each give an estimate of `2` against `3` real behaviours:
-
-```python
-# utility-goals = {delivered(l1): 5, delivered(l2): 5}
-counter.count()                      # 3  -- l1 only, l2 only, both
-counter.estimated_behaviour_count()  # 2  -- only the distinct sums 5 and 10
-```
-
-The same routine also enumerates subsets from `r = 1`, excluding the empty one, so a plan
-that achieves nothing has no candidate either. Since `estimated_behaviour_count()`
-multiplies across dimensions, a low `uv` estimate drags the whole product below the real
-count. Fixing it means encoding candidates the way `plan_behaviour` does, and deciding
-whether the empty subset counts as a behaviour.
+**The `uv` domain estimate is not a true upper bound.** Each dimension can estimate its
+domain size (`_estimate_domain()` / `estimated_domain_size`); the counter no longer
+aggregates these, but they remain part of the dimension interface.
+`UtilityValueDimension._estimate_domain` builds each candidate as
+`sum -- <all declared utilities>`, and that second part is identical for every subset, so
+the set collapses to the distinct achievable *sums*. But `plan_behaviour` encodes *which*
+goals were achieved, which distinguishes subsets that share a sum: two goals worth `5`
+each give an `estimated_domain_size` of `2` (the sums `5` and `10`) against `3` real
+behaviours (l1 only, l2 only, both). The same routine also enumerates subsets from
+`r = 1`, excluding the empty one, so a plan that achieves nothing has no candidate either.
+Fixing it means encoding candidates the way `plan_behaviour` does, and deciding whether
+the empty subset counts as a behaviour.
 
 **B-MaxSum is only defined over `go`, `cb` and `ru`.** The other three dimensions have no
 `distance()` and raise `AssertionError` — see the B-MaxSum metric section.
@@ -222,7 +233,7 @@ whether the empty subset counts as a behaviour.
   crashing `plan_behaviour` with `IndexError`; and `plan_behaviour` returned
   `','.join(val)` over an already-joined string, yielding `'f,u,e,l,:,8'` for `'fuel:8'`.
 - **B-MaxSum crashed on `cb`.** `distance()` read `.actions` off its arguments, expecting
-  plan objects, while `compute_b_maxsum_metric` passes behaviour strings. It now parses its
+  plan objects, while `b_maxsum` passes behaviour strings. It now parses its
   own token and normalises into `[0, 1]`.
 - **`rc` tokens were ambiguous.** Counts were joined with ` $$ `, the separator used
   *between* dimensions, with no `rc:` prefix. They are now one prefixed, comma-separated,
@@ -247,7 +258,7 @@ poetry run pytest
 tests/conftest.py         a tiny transport task, hand-checkable behaviour strings
 tests/test_parsers.py     the (:resource ...) / (:function ...) file parsers
 tests/test_dimensions.py  each dimension: tokens, domains, estimates, distances
-tests/test_counter.py     count / optimise / estimate / B-MaxSum, and edge cases
+tests/test_counter.py     bdc / extract / b_maxsum, and edge cases
 ```
 
 The expected strings are worked out by hand from the fixture task rather than recorded from

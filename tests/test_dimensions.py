@@ -10,7 +10,7 @@ import math
 import pytest
 from unified_planning.shortcuts import SequentialSimulator
 
-from behaviour_diversity_counter.behaviour_diversity_counter import (
+from behaviour_diversity_counter import (
     BehaviourDiversityCounter,
 )
 from behaviour_diversity_counter.dimensions.base import BehaviourDimension
@@ -179,7 +179,7 @@ class TestMakespanOptimalCost:
 
     def test_distance_accepts_behaviour_strings_like_the_other_dimensions(self, task):
         """Regression: distance() read .actions off its arguments, so it only worked
-        on plan objects -- but compute_b_maxsum_metric passes behaviour strings."""
+        on plan objects -- but b_maxsum passes behaviour strings."""
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
         # |4 - 6| / max(4, 6)
@@ -372,8 +372,8 @@ class TestResourceCount:
             task, [plan_l1_then_l2], [('go', None), ('rc', resource_file), ('ru', resource_file)]
         )
 
-        counter.count()
-        behaviour = next(iter(counter.collected_behaviours))
+        counter.bdc()
+        behaviour = next(iter(counter.behaviours))
 
         # One token per dimension, recoverable by prefix.
         assert len(behaviour.split(' $$ ')) == 3
@@ -487,5 +487,5 @@ class TestFunctions:
         """End to end: the fn dimension was unusable as shipped."""
         counter = BehaviourDiversityCounter(task, [plan_l1_then_l2], [('fn', function_file)])
 
-        assert counter.count() == 1
-        assert counter.collected_behaviours == {'fuel:8'}
+        assert counter.bdc() == 1
+        assert counter.behaviours == {'fuel:8'}

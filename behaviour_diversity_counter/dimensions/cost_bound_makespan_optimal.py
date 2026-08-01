@@ -27,7 +27,7 @@ class MakespanOptimalCostDimension(BehaviourDimension):
 
     def distance(self, plan1, plan2):
         # Takes behaviour strings, like every other dimension: this is what
-        # BehaviourDiversityCounter.compute_b_maxsum_metric passes in.
+        # BehaviourDiversityCounter.b_maxsum passes in.
         cost1, cost2 = self._cost(plan1), self._cost(plan2)
         if max(cost1, cost2) == 0:
             return 0.0
