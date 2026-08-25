@@ -1,5 +1,10 @@
 """The plan-level baseline: Stability, and greedy MaxSum over it.
 
+Named ``baseline`` rather than ``selectors``: a runner in this directory puts
+it on ``sys.path`` ahead of the standard library, and a module called
+``selectors`` there shadows the stdlib one that ``subprocess`` imports, which
+breaks ``unified_planning`` at import time with an error naming neither.
+
 This is what the diverse-planning literature does, and the only condition in
 the three experiments that never touches the behaviour space. It lives here
 rather than in the library because it is not part of the behaviour-space model

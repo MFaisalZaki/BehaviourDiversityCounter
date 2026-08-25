@@ -701,7 +701,7 @@ sys.path.insert(0, {tests!r})
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {paperexps!r})
 from test_golden import StubCounter
-from paperexps.selectors import Stability, greedy_maxsum_stability
+from paperexps.baseline import Stability, greedy_maxsum_stability
 
 rng = random.Random(int(sys.argv[1]))
 specs = [(rng.randint(1, 4), ''.join(rng.sample('RIS', 3))) for _ in range(40)]
@@ -797,28 +797,28 @@ class TestMultisetStability:
                 StubPlan(1, 'RIS', actions=['a', 'b']))
 
     def test_the_multiset_reading(self, pair):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         assert Stability(multiset=True).distance(*pair) == pytest.approx(1 / 3)
 
     def test_the_set_reading(self, pair):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         assert Stability(multiset=False).distance(*pair) == pytest.approx(0.0)
 
     def test_the_two_readings_actually_differ(self, pair):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         assert Stability(multiset=True).distance(*pair) != \
                Stability(multiset=False).distance(*pair)
 
     def test_the_multiset_reading_is_the_default(self, pair):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         assert Stability().distance(*pair) == pytest.approx(1 / 3)
 
     def test_order_never_matters_under_either_reading(self):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         p = StubPlan(1, 'RIS', actions=['a', 'b', 'a'])
         q = StubPlan(1, 'RIS', actions=['a', 'a', 'b'])
@@ -827,7 +827,7 @@ class TestMultisetStability:
             assert Stability(multiset=multiset).distance(p, q) == pytest.approx(0.0)
 
     def test_disjoint_plans_score_one(self):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         p = StubPlan(1, 'RIS', actions=['a', 'a'])
         q = StubPlan(1, 'RIS', actions=['b'])
@@ -835,7 +835,7 @@ class TestMultisetStability:
         assert Stability().distance(p, q) == pytest.approx(1.0)
 
     def test_two_empty_plans_are_identical(self):
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         p, q = StubPlan(1, 'RIS', actions=[]), StubPlan(1, 'RIS', actions=[])
 
@@ -843,7 +843,7 @@ class TestMultisetStability:
 
     def test_a_repeated_action_is_what_separates_the_readings(self):
         """Four drives against one: identical as sets, far apart as multisets."""
-        from paperexps.selectors import Stability
+        from paperexps.baseline import Stability
 
         many = StubPlan(1, 'RIS', actions=['drive'] * 4 + ['sample'])
         once = StubPlan(1, 'RIS', actions=['drive', 'sample'])
@@ -854,7 +854,7 @@ class TestMultisetStability:
 
 class TestGreedyMaxSumStability:
     def test_it_opens_on_the_farthest_pair(self):
-        from paperexps.selectors import greedy_maxsum_stability
+        from paperexps.baseline import greedy_maxsum_stability
 
         near_a = StubPlan(1, 'RIS', actions=['a', 'b'])
         near_b = StubPlan(1, 'RIS', actions=['a', 'b', 'c'])
@@ -865,21 +865,21 @@ class TestGreedyMaxSumStability:
         assert set(map(id, selected)) == {id(near_a), id(far)}
 
     def test_it_returns_exactly_k_plans(self):
-        from paperexps.selectors import greedy_maxsum_stability
+        from paperexps.baseline import greedy_maxsum_stability
 
         plans = [StubPlan(1, 'RIS', actions=[f'a{i}', 'shared']) for i in range(10)]
 
         assert len(greedy_maxsum_stability(plans, k=4)) == 4
 
     def test_k_beyond_the_pool_returns_the_pool(self):
-        from paperexps.selectors import greedy_maxsum_stability
+        from paperexps.baseline import greedy_maxsum_stability
 
         plans = [StubPlan(1, 'RIS', actions=[f'a{i}']) for i in range(3)]
 
         assert len(greedy_maxsum_stability(plans, k=99)) == 3
 
     def test_ties_fall_to_the_lowest_pool_index(self):
-        from paperexps.selectors import greedy_maxsum_stability
+        from paperexps.baseline import greedy_maxsum_stability
 
         plans = [StubPlan(1, 'RIS', actions=[letter]) for letter in 'abcd']
 
