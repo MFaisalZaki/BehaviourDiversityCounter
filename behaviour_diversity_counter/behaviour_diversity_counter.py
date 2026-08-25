@@ -73,7 +73,75 @@ class BehaviourDiversityCounter:
         self._behaviour_cache = {}
         self._distance_cache = {}
         self._weights = {}
+        self._counters_enabled = False
+        self._simulator_apply = None
+        self.reset_counters()
         self.set_weights(weights)
+
+    # ------------------------------------------------------------------
+    # Instrumentation
+    # ------------------------------------------------------------------
+
+    def enable_counters(self, enabled=True):
+        """Turn the per-run counters on (or off again), resetting them.
+
+        Off by default, and off costs nothing at all: enabling swaps the hot
+        methods for counting variants through the instance dictionary rather
+        than leaving a flag to test on every distance lookup, which is the one
+        call Experiment A is trying to time.
+
+        The cache hits are counted apart from the calls because the cache is
+        precisely what makes a behaviour distance cheap -- there are only b
+        distinct behaviours to compare, however many plans exhibit them -- and
+        that is part of the result rather than an implementation detail.
+        """
+        enabled = bool(enabled)
+        self.reset_counters()
+        if enabled == self._counters_enabled:
+            return
+        self._counters_enabled = enabled
+        if enabled:
+            self._pair_distance = self._counted_pair_distance
+            if self._simulator is not None:
+                self._simulator_apply = self._simulator.apply
+                self._simulator.apply = self._counted_apply
+        else:
+            self.__dict__.pop('_pair_distance', None)
+            if self._simulator_apply is not None:
+                self._simulator.apply = self._simulator_apply
+                self._simulator_apply = None
+
+    def reset_counters(self):
+        """Zero the counters, so one counter object can time many runs."""
+        self.n_distance_evals = 0
+        self.n_distance_misses = 0
+        self.n_simulator_calls = 0
+
+    @property
+    def counters(self):
+        return {
+            'n_distance_evals': self.n_distance_evals,
+            'n_distance_misses': self.n_distance_misses,
+            'n_simulator_calls': self.n_simulator_calls,
+        }
+
+    def _counted_apply(self, *args, **kwargs):
+        self.n_simulator_calls += 1
+        return self._simulator_apply(*args, **kwargs)
+
+    def _counted_pair_distance(self, b1, b2):
+        # Deliberately a parallel copy of _pair_distance rather than a wrapper
+        # around it: a wrapper would build the cache key twice per call, which
+        # would inflate exactly the measurement this exists to take. The one
+        # thing both need to agree on -- the distance itself -- is shared.
+        self.n_distance_evals += 1
+        if len(self.dimensions) == 0:
+            return 0.0
+        key = (b1, b2) if b1 <= b2 else (b2, b1)
+        if key not in self._distance_cache:
+            self.n_distance_misses += 1
+            self._distance_cache[key] = self._compute_pair_distance(b1, b2)
+        return self._distance_cache[key]
 
     # ------------------------------------------------------------------
     # Weights
@@ -302,8 +370,20 @@ class BehaviourDiversityCounter:
         return self._selection(plans, chosen, scores, monotone=False)
 
     def _extract_b_novelty(self, plans, behaviours, k, k_nn=DEFAULT_K_NN):
-        # Plain greedy on B-Novelty: at every step add the plan that maximises the
-        # indicator of the resulting set.
+        # Greedy on B-Novelty: at every step add the plan that maximises the
+        # indicator of the resulting set, among the plans that contribute a
+        # behaviour not already selected.
+        #
+        # The restriction to new behaviours is the convention B-MaxSum and
+        # B-Coverage already follow here, and B-Novelty needs it stated because
+        # it is the one indicator a duplicate leaves *exactly* unchanged: a
+        # duplicate is invisible to the score, while a genuinely new behaviour
+        # can lower it. Unrestricted greedy therefore stops covering behaviours
+        # the moment the next one would cost anything and pads the rest of k
+        # with copies -- on gripper's k=1000 pool it covers four behaviours and
+        # fills the other sixteen slots with duplicates, at which point the
+        # trace can no longer fall and the highest-scoring-prefix rule this
+        # indicator is documented to need would never fire.
         #
         # B-Novelty reads only the *distinct* behaviours, so the value is computed
         # once per distinct candidate behaviour and then scanned back over the pool
@@ -317,6 +397,7 @@ class BehaviourDiversityCounter:
         if k <= 0 or not plans:
             return self._selection(plans, [], [], monotone=False)
         candidates = list(dict.fromkeys(behaviours))
+        remaining_behaviours = set(candidates)
 
         chosen, picked, scores = [], set(), []
         selected = []          # the distinct behaviours chosen so far, in pick order
@@ -327,10 +408,14 @@ class BehaviourDiversityCounter:
         while len(chosen) < k and len(picked) < len(plans):
             m = len(selected)
             k_prime = min(k_nn, m)
+            fresh = any(behaviour not in selected_set for behaviour in candidates
+                        if behaviour in remaining_behaviours)
             values = {}
             for behaviour in candidates:
                 if behaviour in selected_set:
-                    values[behaviour] = current   # a duplicate leaves the value alone
+                    # A duplicate leaves the value alone, so it is only ever
+                    # taken once no unselected behaviour is left in the pool.
+                    values[behaviour] = current if not fresh else -1.0
                 elif k_prime == 0:
                     values[behaviour] = 0.0       # a singleton set has no neighbours
                 else:
@@ -350,9 +435,12 @@ class BehaviourDiversityCounter:
 
             picked.add(best)
             chosen.append(best)
+            behaviour = behaviours[best]
+            remaining_behaviours.discard(behaviour)
+            if behaviour in selected_set:
+                best_value = current      # the duplicate's real value, not the -1 sentinel
             scores.append(best_value)
             current = best_value
-            behaviour = behaviours[best]
             if behaviour not in selected_set:
                 to_selected = [self._pair_distance(behaviour, other) for other in selected]
                 for i, distance in enumerate(to_selected):
@@ -366,9 +454,19 @@ class BehaviourDiversityCounter:
         """Wrap a greedy order as a :class:`Selection`.
 
         A monotone indicator never loses by taking one more plan, so its whole
-        order is returned; otherwise the returned set is the first prefix that
-        attained the best score -- the *first*, so that a plateau (a pick that
-        leaves the score untouched) does not quietly pad the selection.
+        order is returned. Otherwise the returned set is the *longest* prefix
+        that attained the best score.
+
+        Longest, not shortest: only a strict fall is a reason to stop handing
+        the user plans, and these indicators plateau constantly -- gripper's 24
+        behaviours realise just three distinct pairwise distances between them,
+        so a pick that leaves the score untouched is the common case rather than
+        the exception. Stopping at the first best prefix would report B-Novelty
+        as returning two plans out of a requested twenty on such a pool, which
+        is a property of the tie rule and not of the indicator. It would also
+        make thm:bmaxmin-degenerate true by construction: B-MaxMin would return
+        a pair whether or not the third behaviour actually lowered the minimum,
+        which is the one thing the experiment is supposed to measure.
         """
         if not chosen:
             return Selection([], [], [], 0)
@@ -379,6 +477,8 @@ class BehaviourDiversityCounter:
             for step, score in enumerate(scores, start=1):
                 if strictly_better(score, best_score):
                     best_step, best_score = step, score
+                elif not strictly_better(best_score, score):
+                    best_step = step        # tied with the best: keep the plans
         order = [plans[idx] for idx in chosen]
         return Selection(order[:best_step], order, list(scores), best_step)
 
@@ -433,8 +533,11 @@ class BehaviourDiversityCounter:
             return 0.0
         key = (b1, b2) if b1 <= b2 else (b2, b1)
         if key not in self._distance_cache:
-            self._distance_cache[key] = sum(
-                self._weights[name] * dimension.distance(b1, b2)
-                for name, dimension in self.dimensions.items())
+            self._distance_cache[key] = self._compute_pair_distance(b1, b2)
         return self._distance_cache[key]
+
+    def _compute_pair_distance(self, b1, b2):
+        """The separable distance itself, uncached."""
+        return sum(self._weights[name] * dimension.distance(b1, b2)
+                   for name, dimension in self.dimensions.items())
 

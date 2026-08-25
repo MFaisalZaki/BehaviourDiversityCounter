@@ -84,7 +84,10 @@ class StubCounter(BehaviourDiversityCounter):
         self._behaviour_cache = {}
         self._distance_cache = {}
         self._weights = {}
+        self._counters_enabled = False
+        self._simulator_apply = None
         self._plans = []          # keeps the plans alive: the cache is keyed by id()
+        self.reset_counters()
         self.set_weights(weights)
 
     def make_plans(self, *specs):
@@ -318,14 +321,17 @@ class TestNoveltyGreedyMatchesItsDefinition:
 
         chosen = []
         for step in range(k):
-            # The stated rule: the best candidate, ties going to the lowest plan
-            # index. The tolerance is what makes "tied" mean *mathematically*
-            # tied -- these sums differ by an ulp depending on the order they
-            # are accumulated in, which is not a difference in the indicator.
+            # The stated rule: the best candidate that contributes a behaviour
+            # not already selected, ties going to the lowest plan index. The
+            # tolerance is what makes "tied" mean *mathematically* tied -- these
+            # sums differ by an ulp depending on the order they are accumulated
+            # in, which is not a difference in the indicator.
+            taken = {plan.behaviour for plan in chosen}
+            available = [plan for plan in plans
+                         if not any(plan is picked for picked in chosen)]
+            fresh = [plan for plan in available if plan.behaviour not in taken]
             best, best_value = None, None
-            for plan in plans:
-                if any(plan is picked for picked in chosen):
-                    continue
+            for plan in (fresh or available):
                 value = naive_b_novelty(counter, chosen + [plan], k_nn)
                 if best_value is None or value > best_value + 1e-9:
                     best, best_value = plan, value
@@ -405,11 +411,275 @@ class TestTiesGoToTheLowestPlanIndex:
 
         assert selection.order[:2] == [plans[0], plans[1]]
 
-    def test_the_first_of_several_equally_good_prefixes_is_returned(self, counter):
-        """A plateau in the trace must not pad the selection: B-MaxMin holds its
-        value here for a step, and the shorter prefix is the one returned."""
-        plans = counter.make_plans((1, 'RIS'), (2, 'SIR'), (3, 'SIR'), (4, 'SIR'))
+    def test_a_plateau_at_the_best_score_keeps_the_longer_prefix(self, counter):
+        """Three mutually equidistant behaviours: the minimum never falls, so
+        there is no reason to hand back fewer plans than were asked for."""
+        plans = counter.make_plans((1, 'RIS'), (2, 'RIS'), (3, 'RIS'))
+
+        selection = counter.extract(plans, k=3, indicator='bmaxmin', trace=True)
+
+        assert selection.scores == pytest.approx([0.0, 0.5, 0.5])
+        assert selection.best_step == 3
+
+    def test_a_strict_fall_still_truncates(self, counter):
+        """The other side of the same rule: once the minimum drops, the prefix
+        before the drop is what is returned.
+
+        Adding (1, 'SIR') puts a strictly farther pair in the pool, so the seed
+        is that pair and the third pick has to fall back to a 'RIS' behaviour,
+        which halves the minimum.
+        """
+        plans = counter.make_plans((1, 'RIS'), (2, 'RIS'), (3, 'RIS'), (1, 'SIR'))
+
         selection = counter.extract(plans, k=4, indicator='bmaxmin', trace=True)
 
+        assert selection.scores == pytest.approx([0.0, 1.5, 0.5, 0.5])
         assert selection.best_step == 2
-        assert selection.scores[1] == pytest.approx(max(selection.scores))
+        assert selection.scores[2] < selection.scores[1]
+
+
+# ----------------------------------------------------------------------
+# Test 6: weights, and the cache they invalidate
+# ----------------------------------------------------------------------
+
+class TestWeights:
+    """The paper's separable distance is d(b, b') = sum_i w_i * d_i(b_i, b'_i),
+    and the weights are the one thing it asks a user to supply.
+
+    The distance cache is keyed by the behaviour pair alone, so every one of
+    these assertions is also an assertion that changing the weights cleared it.
+    Experiment C changes the weights twenty-one times per task on one counter
+    object: a cache that survived the change would return twenty-one identical
+    rows and raise no error at all.
+    """
+
+    @pytest.fixture
+    def behaviours(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
+        return [plan.behaviour for plan in plans]
+
+    def test_the_default_weights_are_uniform(self, counter):
+        assert counter.weights == {'nr': 0.5, 'co': 0.5}
+
+    def test_weighting_out_the_order_dimension(self, counter, behaviours):
+        """w_nr = 1, w_co = 0: only the rover count is left to separate them."""
+        rsi, ris, sir = behaviours
+
+        counter.set_weights({'nr': 1.0, 'co': 0.0})
+
+        assert counter._pair_distance(rsi, ris) == pytest.approx(0.0)
+        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
+
+    def test_the_same_counter_answers_for_both_weightings(self, counter, behaviours):
+        """The heart of the test: twice on ONE counter, weights changed between.
+
+        The first pass warms the cache with the uniform answers; if setting the
+        weights did not clear it, the second pass would return them again.
+        """
+        rsi, ris, sir = behaviours
+
+        # Pass one, the uniform 1/2 default.
+        assert counter._pair_distance(rsi, ris) == pytest.approx(1.0)
+        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0)
+
+        # Pass two, on the same object.
+        counter.set_weights({'nr': 1.0, 'co': 0.0})
+        assert counter._pair_distance(rsi, ris) == pytest.approx(0.0)
+        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
+
+        # And back, so the failure cannot be a one-way cache that merely lags.
+        counter.set_weights({'nr': 0.5, 'co': 0.5})
+        assert counter._pair_distance(rsi, ris) == pytest.approx(1.0)
+        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0)
+
+    def test_the_indicators_follow_the_weights_on_one_counter(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
+
+        uniform = counter.b_maxsum(plans)
+        counter.set_weights({'nr': 1.0, 'co': 0.0})
+        rover_only = counter.b_maxsum(plans)
+        counter.set_weights({'nr': 0.0, 'co': 1.0})
+        order_only = counter.b_maxsum(plans)
+
+        assert uniform == pytest.approx(4.5)
+        assert rover_only == pytest.approx(2.0)   # only (2,SIR) differs in count
+        assert order_only == pytest.approx(7.0)   # Hamming 2 + 3 + 2
+        assert uniform == pytest.approx((rover_only + order_only) / 2)
+
+    def test_a_weight_sweep_on_one_counter_does_not_repeat_itself(self, counter):
+        """Experiment C's sweep in miniature: 21 weightings, one counter."""
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
+
+        values = []
+        for step in range(21):
+            w = step / 20
+            counter.set_weights({'nr': w, 'co': 1.0 - w})
+            values.append(counter.b_maxsum(plans))
+
+        assert len(set(values)) == 21
+        assert values == sorted(values, reverse=True)  # order separates them more
+
+    def test_weights_may_be_given_to_the_constructor(self):
+        counter = StubCounter(weights={'nr': 0.25, 'co': 0.75})
+
+        assert counter.weights == {'nr': 0.25, 'co': 0.75}
+
+    def test_uniform_weights_reproduce_the_unweighted_mean(self, counter):
+        """The default has to leave the pre-weights behaviour exactly as it was."""
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+        rsi, sir = (plan.behaviour for plan in plans)
+        dimensions = counter.dimensions.values()
+
+        assert counter._pair_distance(rsi, sir) == pytest.approx(
+            sum(d.distance(rsi, sir) for d in dimensions) / len(counter.dimensions))
+
+    def test_an_unknown_dimension_in_the_weights_is_rejected(self, counter):
+        with pytest.raises(ValueError, match='unknown dimension'):
+            counter.set_weights({'nr': 1.0, 'co': 0.0, 'nope': 1.0})
+
+    def test_a_missing_weight_is_rejected(self, counter):
+        """Silently defaulting the missing one would be a weighting the user
+        never asked for."""
+        with pytest.raises(ValueError, match='no weight given'):
+            counter.set_weights({'nr': 1.0})
+
+    def test_a_negative_weight_is_rejected(self, counter):
+        with pytest.raises(ValueError, match='negative'):
+            counter.set_weights({'nr': -1.0, 'co': 2.0})
+
+    def test_weights_are_not_normalised(self, counter):
+        """The paper's worked examples read raw per-dimension distances, so the
+        weights are taken as given rather than rescaled to sum to one."""
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+        rsi, sir = (plan.behaviour for plan in plans)
+
+        counter.set_weights({'nr': 2.0, 'co': 2.0})
+
+        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0 * 1 + 2.0 * 3)
+
+
+# ----------------------------------------------------------------------
+# The Experiment A instrumentation
+# ----------------------------------------------------------------------
+
+class TestCounters:
+    def test_counters_are_off_by_default(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+
+        counter.b_maxsum(plans)
+
+        assert counter.counters == {'n_distance_evals': 0, 'n_distance_misses': 0,
+                                    'n_simulator_calls': 0}
+
+    def test_evals_and_misses_are_counted_apart(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
+        counter.enable_counters()
+
+        counter.b_maxsum(plans)     # three pairs, all cold
+        counter.b_maxsum(plans)     # the same three pairs, all warm
+
+        assert counter.counters['n_distance_evals'] == 6
+        assert counter.counters['n_distance_misses'] == 3
+
+    def test_counters_reset_between_runs(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+        counter.enable_counters()
+        counter.b_maxsum(plans)
+
+        counter.reset_counters()
+
+        assert counter.counters['n_distance_evals'] == 0
+
+    def test_disabling_restores_the_uninstrumented_path(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+        counter.enable_counters()
+        counter.b_maxsum(plans)
+
+        counter.enable_counters(False)
+        counter.b_maxsum(plans)
+
+        assert counter.counters['n_distance_evals'] == 0
+
+    def test_the_instrumented_distance_agrees_with_the_plain_one(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
+        plain = (counter.b_coverage(plans), counter.b_maxsum(plans),
+                 counter.b_maxmin(plans), counter.b_novelty(plans))
+
+        instrumented = StubCounter()
+        same = instrumented.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
+        instrumented.enable_counters()
+        counted = (instrumented.b_coverage(same), instrumented.b_maxsum(same),
+                   instrumented.b_maxmin(same), instrumented.b_novelty(same))
+
+        assert counted == pytest.approx(plain)
+
+
+class TestNonMonotoneSelectionsAttainTheirBest:
+    """The prefix rule must not cost the selection its score: whatever length
+    comes back, its indicator value has to equal the best the trace ever saw --
+    and, for B-MaxMin, the largest pairwise distance the pool contains."""
+
+    @pytest.fixture
+    def plans(self, counter):
+        return counter.make_plans(
+            (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (2, 'RIS'), (3, 'SRI'),
+            (1, 'IRS'), (2, 'SIR'), (4, 'ISR'), (1, 'RIS'),
+        )
+
+    @pytest.mark.parametrize('k', [2, 4, 6, 9])
+    def test_maxmin_selection_attains_the_pools_best_minimum(self, counter, plans, k):
+        selection = counter.extract(plans, k=k, indicator='bmaxmin', trace=True)
+        behaviours = counter._distinct_behaviours(plans)
+        best_pair = max(counter._pair_distance(a, b)
+                        for a, b in itertools.combinations(behaviours, 2))
+
+        assert counter.b_maxmin(selection.plans) == pytest.approx(best_pair)
+        assert counter.b_maxmin(selection.plans) == pytest.approx(max(selection.scores))
+
+    @pytest.mark.parametrize('k', [2, 4, 6, 9])
+    @pytest.mark.parametrize('k_nn', [1, 3])
+    def test_novelty_selection_attains_its_traces_best(self, counter, plans, k, k_nn):
+        selection = counter.extract(plans, k=k, indicator='bnovelty',
+                                    k_nn=k_nn, trace=True)
+
+        assert counter.b_novelty(selection.plans, k_nn=k_nn) == pytest.approx(
+            max(selection.scores))
+
+    @pytest.mark.parametrize('indicator', ['bmaxmin', 'bnovelty'])
+    def test_the_selection_is_a_prefix_of_the_order(self, counter, plans, indicator):
+        selection = counter.extract(plans, k=6, indicator=indicator, trace=True)
+
+        assert selection.plans == selection.order[:selection.best_step]
+
+    def test_novelty_covers_behaviours_before_it_repeats_one(self, counter, plans):
+        """Duplicates are only taken once the pool has no new behaviour left,
+        the same convention B-MaxSum and B-Coverage follow."""
+        selection = counter.extract(plans, k=9, indicator='bnovelty', trace=True)
+        behaviours = [plan.behaviour for plan in selection.order]
+        first_repeat = next((i for i, b in enumerate(behaviours)
+                             if b in behaviours[:i]), len(behaviours))
+
+        assert first_repeat == counter.b_coverage(plans)
+
+
+class TestSingleBehaviourPools:
+    """A pool exhibiting one behaviour scores 0 under both non-monotone
+    indicators whatever is selected, so the selection keeps the k plans asked
+    for rather than truncating to one."""
+
+    @pytest.fixture
+    def plans(self, counter):
+        return counter.make_plans(*[(1, 'RIS')] * 5)
+
+    @pytest.mark.parametrize('indicator', ['bmaxmin', 'bnovelty'])
+    @pytest.mark.parametrize('k', [1, 3, 5, 7])
+    def test_k_plans_come_back(self, counter, plans, indicator, k):
+        selected = counter.extract(plans, k=k, indicator=indicator)
+
+        assert len(selected) == min(k, len(plans))
+
+    @pytest.mark.parametrize('indicator', ['bmaxmin', 'bnovelty'])
+    def test_the_score_is_zero_throughout(self, counter, plans, indicator):
+        selection = counter.extract(plans, k=5, indicator=indicator, trace=True)
+
+        assert selection.scores == [0.0] * 5
