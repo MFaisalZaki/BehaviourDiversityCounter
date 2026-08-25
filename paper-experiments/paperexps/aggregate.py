@@ -163,10 +163,11 @@ EXP_B_SUMMARY_FIELDS = [
     'median_maxsum_stability', 'median_spread_go', 'median_spread_ru',
     'median_hidden_pref_rate', 'mean_hidden_pref_rate',
     'total_hidden_hits', 'total_hidden_draws', 'pooled_hidden_rate',
+    'median_hidden_pref_exact', 'mean_hidden_pref_exact',
 ]
 
-EXP_B_TESTED = ['hidden_pref_rate', 'b_coverage', 'b_maxsum', 'b_maxmin',
-                'b_novelty', 'maxsum_stability', 'redundancy_excess']
+EXP_B_TESTED = ['hidden_pref_rate', 'hidden_pref_exact', 'b_coverage', 'b_maxsum',
+                'b_maxmin', 'b_novelty', 'maxsum_stability', 'redundancy_excess']
 
 
 def strata(rows):
@@ -205,6 +206,9 @@ def summarise_exp_b(rows):
                     column(group, 'hidden_pref_rate')) if group else '',
                 'total_hidden_hits': hits, 'total_hidden_draws': draws,
                 'pooled_hidden_rate': (hits / draws) if draws else '',
+                'median_hidden_pref_exact': median(column(group, 'hidden_pref_exact')),
+                'mean_hidden_pref_exact': statistics.fmean(
+                    column(group, 'hidden_pref_exact') or [0.0]),
             })
     return out
 
@@ -362,22 +366,24 @@ def print_headline(exp_b_summary, exp_b_tests, exp_c_summary, exp_c_tests, exp_a
             rule(f'EXPERIMENT B -- what each rule selects [{stratum}, '
                  f'{block[0]["n_tasks"]} tasks]')
             print(f'  {"selector":<20}{"n_sel":>7}{"b_ach":>7}{"redund":>8}{"floor":>7}'
-                  f'{"excess":>8}{"hidden":>9}{"pooled":>9}')
+                  f'{"excess":>8}{"hidden":>9}{"pooled":>9}{"exact":>9}')
             for row in block:
                 print(f'  {row["selector"]:<20}{row["median_n_selected"]:>7.0f}'
                       f'{row["median_b_achieved"]:>7.0f}{row["median_redundancy"]:>8.1f}'
                       f'{row["median_redundancy_floor"]:>7.1f}'
                       f'{row["median_redundancy_excess"]:>8.1f}'
                       f'{row["median_hidden_pref_rate"]:>9.3f}'
-                      f'{row["pooled_hidden_rate"]:>9.3f}')
+                      f'{row["pooled_hidden_rate"]:>9.3f}'
+                      f'{row["median_hidden_pref_exact"]:>9.3f}')
 
         rule('EXPERIMENT B -- hidden preference, Wilcoxon paired per task vs the baseline')
-        print(f'  {"stratum":<12}{"selector":<20}{"n":>4}{"win":>5}{"tie":>5}{"loss":>6}'
-              f'{"median diff":>13}{"p":>12}{"p(Holm)":>10}{"":>4}')
+        print(f'  {"stratum":<12}{"column":<19}{"selector":<18}{"n":>4}{"win":>5}{"tie":>5}'
+              f'{"loss":>6}{"median diff":>13}{"p":>12}{"p(Holm)":>10}{"":>4}')
         for row in exp_b_tests:
-            if row['column'] != 'hidden_pref_rate':
+            if row['column'] not in ('hidden_pref_rate', 'hidden_pref_exact'):
                 continue
-            print(f'  {row["stratum"]:<12}{row["selector"]:<20}{row["n_tasks"]:>4}'
+            print(f'  {row["stratum"]:<12}{row["column"]:<19}{row["selector"]:<18}'
+                  f'{row["n_tasks"]:>4}'
                   f'{row["wins"]:>5}{row["ties"]:>5}{row["losses"]:>6}'
                   f'{row["median_difference"]:>13.4f}{row["p_value"]:>12.5f}'
                   f'{row["p_holm"]:>10.5f}{"  *" if row["significant"] else "":>4}')

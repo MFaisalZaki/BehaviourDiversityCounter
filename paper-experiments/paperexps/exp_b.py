@@ -41,6 +41,11 @@ SCORE_FIELDS = [
     'redundancy', 'b_achieved', 'spread_go', 'spread_ru', 'spread_cb',
     'hidden_pref_hits', 'hidden_pref_draws', 'hidden_pref_rate',
     # Beyond the specified shape, and needed to read it honestly:
+    # The exact probability that a draw from the same distribution is satisfied,
+    # in closed form. Fifty draws carry a standard error near 0.07, which is
+    # wider than any difference between the rules, so the sampled rate alone
+    # cannot say whether two rules differ. This removes that noise entirely.
+    'hidden_pref_exact', 'coverage_by_dimension',
     'n_selected',   # B-MaxMin returns fewer than k, so a shortfall must not
                     # be mistaken for redundancy, which is defined against k
     # A pool holding b < k behaviours forces k - b of the redundancy on every
@@ -101,6 +106,37 @@ def hidden_preference_hits(selected, preferences):
     return hits
 
 
+def pool_dimension_values(pool):
+    """{dimension -> the values it takes anywhere in the pool}."""
+    return {name: {harness.dimension_value(behaviour, name)
+                   for behaviour in pool.distinct}
+            for name in pool.dimensions}
+
+
+def hidden_preference_exact(selected, pool_values):
+    """The exact probability that a draw satisfies this selection.
+
+    The draw is a dimension uniformly, then one of that dimension's attainable
+    values uniformly, so the probability is the mean over dimensions of the
+    fraction of that dimension's values the selection exhibits. Reported beside
+    the sampled rate because fifty draws cannot resolve the differences here --
+    and because it makes plain what the sampled rate is really measuring: a
+    dimension that takes one value across the whole pool contributes 1.0 to
+    every selection alive, which on these benchmarks is most of the ru column.
+    """
+    usable = [name for name, values in pool_values.items() if values and values != {None}]
+    if not usable:
+        return '', ''
+    behaviours = [plan.behaviour for plan in selected]
+    total, parts = 0.0, []
+    for name in usable:
+        covered = {harness.dimension_value(behaviour, name) for behaviour in behaviours}
+        covered &= pool_values[name]
+        total += len(covered) / len(pool_values[name])
+        parts.append(f'{name}:{len(covered)}/{len(pool_values[name])}')
+    return total / len(usable), ','.join(parts)
+
+
 def run_pool(pool, args):
     """The score rows and overlap rows for one task."""
     k, k_nn = args.k, args.k_nn
@@ -110,6 +146,7 @@ def run_pool(pool, args):
     seed = harness.derive_seed(args.seed, pool.task_id, 'select')
     hidden_seed = harness.derive_seed(args.seed, pool.task_id, 'hidden-preference')
     preferences = hidden_preferences(pool, args.hidden_draws, hidden_seed)
+    pool_values = pool_dimension_values(pool)
 
     selections = select_all(pool, k, k_nn, stability)
 
@@ -120,6 +157,7 @@ def run_pool(pool, args):
         behaviour_sets[name] = set(behaviours)
         plan_sets[name] = {id(plan) for plan in selected}
         hits = hidden_preference_hits(selected, preferences)
+        exact, coverage = hidden_preference_exact(selected, pool_values)
         row = {
             'task_id': pool.task_id, 'domain': pool.domain, 'k': k,
             'dimensions': '+'.join(pool.dimensions), 'n_dims': len(pool.dimensions),
@@ -134,6 +172,8 @@ def run_pool(pool, args):
             'hidden_pref_hits': hits,
             'hidden_pref_draws': len(preferences),
             'hidden_pref_rate': (hits / len(preferences)) if preferences else '',
+            'hidden_pref_exact': exact,
+            'coverage_by_dimension': coverage,
             'n_selected': len(selected),
             'redundancy_floor': k - min(k, pool.b),
             'redundancy_excess': (k - counter.b_coverage(selected)) - (k - min(k, pool.b)),

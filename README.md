@@ -8,14 +8,23 @@ decides what "the same thing" means by projecting each plan onto a set of user-c
 and treating the combination of those projections as the plan's **behaviour**. Plans that
 agree on every dimension are one behaviour, however different their action sequences.
 
-From a set of plans you can then get:
+From a set of plans you can then get the paper's four indicators, every one of them
+computed over the **distinct** behaviours, so a duplicate plan changes none of them:
 
-- `bdc(plans)` — the Behaviour Diversity Count indicator: how many distinct behaviours
-  the set actually covers.
-- `b_maxsum(plans)` — the B-MaxSum indicator: sum of pairwise distances between the
-  distinct behaviours.
-- `extract(plans, k, indicator=...)` — select `k` plans maximising either indicator,
-  `'bdc'` (default) or `'bmaxsum'` — see Extracting diverse subsets.
+- `b_coverage(plans)` — B-Coverage: how many distinct behaviours the set actually
+  covers. (`bdc(plans)` is a deprecated alias, under the indicator's former name,
+  Behaviour Diversity Count.)
+- `b_maxsum(plans)` — B-MaxSum: the sum of pairwise distances between the distinct
+  behaviours.
+- `b_maxmin(plans)` — B-MaxMin: the smallest pairwise distance. Fewer than two
+  distinct behaviours score `0`, not `+inf`: a set offering the user no alternative
+  should rank lowest, not highest.
+- `b_novelty(plans, k_nn=3)` — B-Novelty: the mean, over the distinct behaviours, of
+  each behaviour's mean distance to its `k' = min(k_nn, b - 1)` nearest neighbours.
+  Also `0` below two behaviours.
+- `extract(plans, k, indicator=...)` — select `k` plans maximising one of them:
+  `'bcoverage'` (default), `'bmaxsum'`, `'bmaxmin'` or `'bnovelty'` — see Extracting
+  diverse subsets.
 - `behaviours(plans)` — the set of distinct behaviour strings the plans exhibit.
 
 The counter itself is bound to a task and its dimensions; the plan set is an argument
@@ -88,10 +97,12 @@ l2_first = plan((move, (tr1, l0, l2)), (drop, (tr1, l2)),
 counter = BehaviourDiversityCounter(task, [('go', None)])
 plans = [l1_first, l2_first]
 
-counter.bdc(plans)          # 2
+counter.b_coverage(plans)   # 2
 counter.behaviours(plans)   # {'go:delivered(l1)->delivered(l2)',
                             #  'go:delivered(l2)->delivered(l1)'}
 counter.b_maxsum(plans)     # 1.0 -- one pair of behaviours, fully reordered
+counter.b_maxmin(plans)     # 1.0 -- with one pair, the min and the sum coincide
+counter.b_novelty(plans)    # 1.0 -- and so does the mean nearest-neighbour distance
 counter.extract(plans, k=1) # one plan, covering one behaviour
 ```
 
@@ -102,13 +113,18 @@ diversity for your problem.
 ## Constructing the counter
 
 ```python
-BehaviourDiversityCounter(task, dimensions)
+BehaviourDiversityCounter(task, dimensions, weights=None)
 ```
 
 | argument | meaning |
 | --- | --- |
 | `task` | the `unified_planning` `Problem` the plans were built for |
 | `dimensions` | an iterable of `(dimension_key, addinfo)` pairs — see below |
+| `weights` | `{dimension_key: float}` for the separable distance `d(b, b') = Σᵢ wᵢ · dᵢ(bᵢ, b'ᵢ)`; `None` gives the uniform `1/n`, under which the distance is the mean over the dimensions |
+
+`counter.set_weights({...})` changes them afterwards, and clears the pair-distance
+cache as it does — that cache is keyed by the behaviour pair alone, so a surviving
+entry would answer with the previous weight vector and say nothing about it.
 
 The plan sets are not held by the counter: `bdc`, `b_maxsum`, `behaviours` and `extract`
 each take any iterable of `SequentialPlan` as an argument. Each plan is replayed through
@@ -184,16 +200,23 @@ by `min`, `max` and `delta`; names may be parenthesised (`fuel(tr1)`).
 For `fn`, `delta` is the bin width: a value is reported as the index of the bin it lands
 in, so `fuel = 80` over `0..100` step `10` becomes bin `8`.
 
-## B-MaxSum metric
+## The behaviour distance
 
-`b_maxsum(plans)` discards duplicate behaviours, then sums the distance over
-every unordered pair of the distinct behaviours that remain. A pair's distance is the
-mean of the per-dimension `distance()` values, so each pair scores in `[0, 1]` — but the
-metric is a sum over pairs, not an average, so it grows with the number of distinct
-behaviours and can exceed `1`. Fewer than two distinct behaviours score `0.0`.
+Every indicator but `b_coverage` is built on one pairwise distance between behaviours,
+the paper's separable
 
-Three dimensions implement `distance()`, each normalised into `[0, 1]` so they can be
-averaged together:
+    d(b, b') = Σᵢ wᵢ · dᵢ(bᵢ, b'ᵢ)
+
+with the weights defaulting to `1/n`, under which it is the mean of the per-dimension
+`distance()` values and each pair scores in `[0, 1]`.
+
+`b_maxsum(plans)` discards duplicate behaviours, then sums that distance over every
+unordered pair of the distinct behaviours that remain. It is a sum over pairs, not an
+average, so it grows with the number of distinct behaviours and can exceed `1`. Fewer
+than two distinct behaviours score `0.0`, as they do under `b_maxmin` and `b_novelty`.
+
+Three dimensions implement `distance()`, each normalised into `[0, 1]` so they combine
+sensibly under uniform weights:
 
 | dimension | distance |
 | --- | --- |
@@ -201,22 +224,71 @@ averaged together:
 | `cb` | `abs(c1 - c2) / max(c1, c2)` over the two plan costs |
 | `ru` | Jaccard complement — `1 - |A ∩ B| / |A ∪ B|` — over the used sets |
 
-`rc`, `uv` and `fn` do not implement one and raise `AssertionError`, so the B-MaxSum metric
-can only be computed over dimension sets drawn from `go`, `cb` and `ru`.
+`rc`, `uv` and `fn` do not implement one and raise `AssertionError`, so every indicator
+but `b_coverage` can only be computed over dimension sets drawn from `go`, `cb` and `ru`.
 
 ## Extracting diverse subsets
 
-`extract(plans, k, indicator=...)` selects `k` plans from the given pool, maximising the
-chosen indicator:
+`extract(plans, k, indicator=..., k_nn=3, trace=False)` selects `k` plans from the given
+pool, maximising the chosen indicator:
 
-- `'bdc'` (default) scans the pool in order and takes a plan only when its behaviour has
-  not been seen yet. Once every behaviour is covered, the remaining slots are filled with
-  duplicates, which leave the indicator unchanged.
+- `'bcoverage'` (default; `'bdc'` is an alias) scans the pool in order and takes a plan
+  only when its behaviour has not been seen yet. Once every behaviour is covered, the
+  remaining slots are filled with duplicates, which leave the indicator unchanged. It
+  calls no distance function at all.
 - `'bmaxsum'` is greedy: it repeatedly adds the plan whose behaviour has the greatest
   summed distance to the behaviours already selected. The first pick is arbitrary, since
   singleton sets score zero, and duplicates gain nothing, so they are only picked once
-  every remaining candidate repeats a selected behaviour. Like the metric itself, it is
-  only defined over `go`, `cb` and `ru`.
+  every remaining candidate repeats a selected behaviour.
+- `'bmaxmin'` is farthest-first: it starts from the pair of behaviours at maximum
+  distance, then repeatedly adds the plan whose behaviour maximises the minimum distance
+  to those already chosen.
+- `'bnovelty'` is greedy on B-Novelty, over the plans that contribute a behaviour not
+  already selected — the same convention the other two follow, and B-Novelty is the one
+  indicator that needs it stated, being the one a duplicate leaves *exactly* unchanged.
+
+Like the distance itself, all but `'bcoverage'` are only defined over `go`, `cb` and `ru`.
+
+**B-MaxMin and B-Novelty are not monotone**: adding a plan can lower them. What comes
+back is therefore the highest-scoring *prefix* of the greedy order rather than its final
+`k` plans — the longest prefix that attains it, since only a strict fall is a reason to
+hand the user fewer plans than they asked for. For B-MaxMin that prefix is usually the
+seed pair, whatever `k` was: a third behaviour can only lower a minimum. That is a
+property of the indicator, not a bug in the extraction.
+
+`trace=True` returns a `Selection` instead of a plan list, so the non-monotonicity is
+reportable rather than merely worked around:
+
+```python
+selection = counter.extract(plans, k=20, indicator='bmaxmin', trace=True)
+selection.plans      # the best-scoring prefix -- what a caller should use
+selection.order      # all 20 picks, in the order the greedy made them
+selection.scores     # the indicator after each pick; scores[i] is of order[:i+1]
+selection.best_step  # len(selection.plans)
+```
+
+Ties are broken by lowest plan index in pool order, everywhere, through a tolerance:
+greedy scores are sums of the same distances accumulated in different orders, so two
+mathematically equal candidates routinely differ by one unit in the last place, and
+letting that decide the pick is reproducible but not stable.
+
+## Instrumentation
+
+`counter.enable_counters()` turns on three per-run counters, for measuring where the
+time goes:
+
+| counter | counts |
+| --- | --- |
+| `n_distance_evals` | calls to the pairwise behaviour distance |
+| `n_distance_misses` | those that missed the cache and were actually computed |
+| `n_simulator_calls` | `SequentialSimulator.apply` calls |
+
+Calls and misses are counted apart because the cache is what makes a behaviour distance
+cheap — there are only `b` behaviour strings to compare, however many plans exhibit them.
+`reset_counters()` zeroes them between runs, `counter.counters` reads them, and
+`enable_counters(False)` turns them off again. They are off by default, and off costs
+nothing at all: enabling swaps the hot methods through the instance dictionary rather
+than leaving a flag to test on every distance lookup.
 
 ## Known issues
 
