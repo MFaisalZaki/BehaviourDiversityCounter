@@ -63,8 +63,14 @@ class CollectionOrderDimension:
 class StubPlan:
     """A plan that is nothing but its behaviour."""
 
-    def __init__(self, rovers, order):
+    def __init__(self, rovers, order, actions=None):
         self.behaviour = f'nr:{rovers} $$ co:{order}'
+        # The plan-level baseline reads actions, not behaviours. Derived from
+        # the behaviour so that distinct behaviours differ at the plan level
+        # too, and repeated so the multiset reading has something to see.
+        self.actions = actions if actions is not None else (
+            [f'collect_{letter}' for letter in order] +
+            [f'drive_rover{i}' for i in range(1, rovers + 1)] * 2)
 
     def __repr__(self):
         return f'StubPlan({self.behaviour!r})'
@@ -683,3 +689,200 @@ class TestSingleBehaviourPools:
         selection = counter.extract(plans, k=5, indicator=indicator, trace=True)
 
         assert selection.scores == [0.0] * 5
+
+
+# ----------------------------------------------------------------------
+# Test 7: determinism
+# ----------------------------------------------------------------------
+
+DETERMINISM_SCRIPT = r'''
+import json, random, sys
+sys.path.insert(0, {tests!r})
+sys.path.insert(0, {root!r})
+sys.path.insert(0, {paperexps!r})
+from test_golden import StubCounter
+from paperexps.selectors import Stability, greedy_maxsum_stability
+
+rng = random.Random(int(sys.argv[1]))
+specs = [(rng.randint(1, 4), ''.join(rng.sample('RIS', 3))) for _ in range(40)]
+counter = StubCounter()
+plans = counter.make_plans(*specs)
+position = {{id(plan): index for index, plan in enumerate(plans)}}
+
+out = {{}}
+for indicator in ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty'):
+    selected = counter.extract(plans, k=8, indicator=indicator)
+    out[indicator] = [position[id(plan)] for plan in selected]
+out['maxsum_stability'] = [position[id(plan)]
+                           for plan in greedy_maxsum_stability(plans, 8)]
+out['scores'] = [round(counter.b_maxsum(plans), 12),
+                 round(counter.b_maxmin(plans), 12),
+                 round(counter.b_novelty(plans), 12),
+                 round(Stability(plans).maxsum(plans), 12)]
+print(json.dumps(out, sort_keys=True))
+'''
+
+
+class TestDeterminism:
+    """The same seed and the same inputs must give byte-identical selections,
+    for all five selectors.
+
+    Run in subprocesses under different PYTHONHASHSEED values, because that is
+    what a hidden dependence on set or dict iteration order actually looks
+    like: string hashing is randomised per process, so a selector that ranked
+    candidates by walking a set would agree with itself all day inside one
+    interpreter and disagree across the runs of a sweep.
+    """
+
+    @staticmethod
+    def _run(tmp_path, seed, hash_seed):
+        import json
+        import os
+        import subprocess
+        import sys
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.dirname(here)
+        script = tmp_path / f'determinism_{hash_seed}.py'
+        script.write_text(DETERMINISM_SCRIPT.format(
+            tests=here, root=root,
+            paperexps=os.path.join(root, 'paper-experiments')))
+        environment = dict(os.environ, PYTHONHASHSEED=str(hash_seed))
+        result = subprocess.run([sys.executable, str(script), str(seed)],
+                                capture_output=True, text=True, env=environment)
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+
+    def test_two_runs_agree_across_hash_seeds(self, tmp_path):
+        first = self._run(tmp_path, seed=2026, hash_seed=0)
+        second = self._run(tmp_path, seed=2026, hash_seed=987654321)
+
+        assert first == second
+        for selector in ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty',
+                         'maxsum_stability'):
+            assert first[selector] == second[selector], selector
+
+    def test_a_third_hash_seed_agrees_too(self, tmp_path):
+        first = self._run(tmp_path, seed=2026, hash_seed=1)
+        second = self._run(tmp_path, seed=2026, hash_seed=42)
+
+        assert first == second
+
+    def test_a_different_seed_gives_a_different_pool(self, tmp_path):
+        """A guard on the guard: if the seed were ignored, the test above would
+        pass while proving nothing."""
+        first = self._run(tmp_path, seed=2026, hash_seed=0)
+        other = self._run(tmp_path, seed=7, hash_seed=0)
+
+        assert first != other
+
+
+# ----------------------------------------------------------------------
+# Test 8: multiset stability
+# ----------------------------------------------------------------------
+
+class TestMultisetStability:
+    """p = [a, a, b] against q = [a, b].
+
+    Under the multiset reading the intersection is 2 and the union 3, so
+    stability(p, q) = 1/3. Under the set reading both are {a, b} and it is 0.
+    The two readings *must* differ here, or the multiset implementation is
+    quietly the set one and the baseline has been handed a weaker notion of
+    difference than Katz and Sohrabi defined.
+    """
+
+    @pytest.fixture
+    def pair(self):
+        return (StubPlan(1, 'RIS', actions=['a', 'a', 'b']),
+                StubPlan(1, 'RIS', actions=['a', 'b']))
+
+    def test_the_multiset_reading(self, pair):
+        from paperexps.selectors import Stability
+
+        assert Stability(multiset=True).distance(*pair) == pytest.approx(1 / 3)
+
+    def test_the_set_reading(self, pair):
+        from paperexps.selectors import Stability
+
+        assert Stability(multiset=False).distance(*pair) == pytest.approx(0.0)
+
+    def test_the_two_readings_actually_differ(self, pair):
+        from paperexps.selectors import Stability
+
+        assert Stability(multiset=True).distance(*pair) != \
+               Stability(multiset=False).distance(*pair)
+
+    def test_the_multiset_reading_is_the_default(self, pair):
+        from paperexps.selectors import Stability
+
+        assert Stability().distance(*pair) == pytest.approx(1 / 3)
+
+    def test_order_never_matters_under_either_reading(self):
+        from paperexps.selectors import Stability
+
+        p = StubPlan(1, 'RIS', actions=['a', 'b', 'a'])
+        q = StubPlan(1, 'RIS', actions=['a', 'a', 'b'])
+
+        for multiset in (True, False):
+            assert Stability(multiset=multiset).distance(p, q) == pytest.approx(0.0)
+
+    def test_disjoint_plans_score_one(self):
+        from paperexps.selectors import Stability
+
+        p = StubPlan(1, 'RIS', actions=['a', 'a'])
+        q = StubPlan(1, 'RIS', actions=['b'])
+
+        assert Stability().distance(p, q) == pytest.approx(1.0)
+
+    def test_two_empty_plans_are_identical(self):
+        from paperexps.selectors import Stability
+
+        p, q = StubPlan(1, 'RIS', actions=[]), StubPlan(1, 'RIS', actions=[])
+
+        assert Stability().distance(p, q) == pytest.approx(0.0)
+
+    def test_a_repeated_action_is_what_separates_the_readings(self):
+        """Four drives against one: identical as sets, far apart as multisets."""
+        from paperexps.selectors import Stability
+
+        many = StubPlan(1, 'RIS', actions=['drive'] * 4 + ['sample'])
+        once = StubPlan(1, 'RIS', actions=['drive', 'sample'])
+
+        assert Stability(multiset=False).distance(many, once) == pytest.approx(0.0)
+        assert Stability(multiset=True).distance(many, once) == pytest.approx(1 - 2 / 5)
+
+
+class TestGreedyMaxSumStability:
+    def test_it_opens_on_the_farthest_pair(self):
+        from paperexps.selectors import greedy_maxsum_stability
+
+        near_a = StubPlan(1, 'RIS', actions=['a', 'b'])
+        near_b = StubPlan(1, 'RIS', actions=['a', 'b', 'c'])
+        far = StubPlan(1, 'RIS', actions=['x', 'y', 'z'])
+
+        selected = greedy_maxsum_stability([near_a, near_b, far], k=2)
+
+        assert set(map(id, selected)) == {id(near_a), id(far)}
+
+    def test_it_returns_exactly_k_plans(self):
+        from paperexps.selectors import greedy_maxsum_stability
+
+        plans = [StubPlan(1, 'RIS', actions=[f'a{i}', 'shared']) for i in range(10)]
+
+        assert len(greedy_maxsum_stability(plans, k=4)) == 4
+
+    def test_k_beyond_the_pool_returns_the_pool(self):
+        from paperexps.selectors import greedy_maxsum_stability
+
+        plans = [StubPlan(1, 'RIS', actions=[f'a{i}']) for i in range(3)]
+
+        assert len(greedy_maxsum_stability(plans, k=99)) == 3
+
+    def test_ties_fall_to_the_lowest_pool_index(self):
+        from paperexps.selectors import greedy_maxsum_stability
+
+        plans = [StubPlan(1, 'RIS', actions=[letter]) for letter in 'abcd']
+
+        selected = greedy_maxsum_stability(plans, k=3)
+
+        assert [plan.actions[0] for plan in selected] == ['a', 'b', 'c']

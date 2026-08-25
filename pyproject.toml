@@ -32,4 +32,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+# paper-experiments is on the path so the golden tests can reach the
+# plan-level baseline in paperexps/selectors.py.
+pythonpath = [".", "paper-experiments"]
