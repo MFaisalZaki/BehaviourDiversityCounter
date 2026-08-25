@@ -51,6 +51,11 @@ DEFAULT_K_SWEEP = [5, 10, 20, 50]
 
 def time_selection(plans, selector, k, k_nn, counter, stability_factory):
     """One cold-cache selection, timed, with the counters read off after."""
+    # Reset before every selector, the baseline included: its row must report
+    # the zero distance evaluations it actually makes -- it never touches the
+    # behaviour space -- rather than inheriting the previous selector's count.
+    counter._distance_cache.clear()
+    counter.reset_counters()
     if selector == 'maxsum_stability':
         # A fresh Stability per repeat: its feature cache is the analogue of the
         # counter's distance cache, and carrying it over would time nothing.
@@ -58,8 +63,6 @@ def time_selection(plans, selector, k, k_nn, counter, stability_factory):
         start = time.perf_counter()
         selected = greedy_maxsum_stability(plans, k, stability)
         return time.perf_counter() - start, selected
-    counter._distance_cache.clear()
-    counter.reset_counters()
     start = time.perf_counter()
     selected = counter.extract(plans, k=k, indicator=selector, k_nn=k_nn)
     return time.perf_counter() - start, selected

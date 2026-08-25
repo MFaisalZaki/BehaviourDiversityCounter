@@ -57,9 +57,23 @@ def save(figure, out_dir, name):
 
 # ----------------------------------------------------------------------
 
+def dominant_k(rows):
+    """The k the pool-size sweep ran at: the one appearing at the most sizes.
+
+    Not the median of the k column -- the k sweep adds 5, 10 and 50 at the
+    largest size only, which can drag a median off the value every size shares.
+    """
+    spread = collections.defaultdict(set)
+    for row in rows:
+        spread[number(row, 'k')].add(number(row, 'pool_size'))
+    if not spread:
+        return 20
+    return int(max(spread, key=lambda k: (len(spread[k]), -k)))
+
+
 def figure_exp_a_scaling(rows, out_dir, plt):
     """Selection time against pool size, per rule, with extraction for scale."""
-    k = int(median(column(rows, 'k'))) if rows else 20
+    k = dominant_k(rows)
     at_k = [row for row in rows if number(row, 'k') == k]
     figure, axes = plt.subplots(1, 2, figsize=(9, 3.4))
 
@@ -106,7 +120,7 @@ def figure_exp_a_scaling(rows, out_dir, plt):
 
 def figure_exp_a_distances(rows, out_dir, plt):
     """Distance evaluations against cache misses: what the cache is worth."""
-    k = int(median(column(rows, 'k'))) if rows else 20
+    k = dominant_k(rows)
     at_k = [row for row in rows if number(row, 'k') == k]
     sizes = sorted({int(number(row, 'pool_size')) for row in at_k})
     figure, axis = plt.subplots(figsize=(5, 3.4))

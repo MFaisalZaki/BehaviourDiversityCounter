@@ -342,7 +342,13 @@ def print_headline(exp_b_summary, exp_b_tests, exp_c_summary, exp_c_tests, exp_a
     if exp_a_summary:
         rule('EXPERIMENT A -- selection cost (median seconds over tasks; no test on wall-clock)')
         sizes = sorted({row['pool_size'] for row in exp_a_summary})
-        k = median([row['k'] for row in exp_a_summary])
+        # The k the pool-size sweep ran at: the one appearing at the most sizes.
+        # Not the median of the column -- the k sweep adds 5, 10 and 50 at the
+        # largest size only, which drags a median off the shared value.
+        spread = collections.defaultdict(set)
+        for row in exp_a_summary:
+            spread[row['k']].add(row['pool_size'])
+        k = max(spread, key=lambda value: (len(spread[value]), -value)) if spread else 20
         print(f'  {"selector":<20}' + ''.join(f'{size:>12}' for size in sizes))
         for selector in harness.SELECTORS:
             line = f'  {selector:<20}'
