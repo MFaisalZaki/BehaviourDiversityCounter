@@ -1,0 +1,66 @@
+{
+    "name": "default",
+    "cfgs": {
+        "timelimit": "01:30:00",
+        "memorylimit": "8GB",
+        "slurm-time-headroom": "00:05:00",
+        "slurm-memory-headroom": "1GB",
+        "slurm": {
+            "cpus-per-task": 1,
+            "partition": null,
+            "account": null,
+            "qos": null,
+            "max-parallel-jobs": 50,
+            "max-array-size": 1000,
+            "extra-directives": []
+        }
+    },
+    "pools": {
+        "requested-k": [
+            1000
+        ],
+        "include-domains": [],
+        "exclude-domains": [],
+        "min-behaviour-count": 0,
+        "min-plans": 1,
+        "require-resources": false,
+        "max-pools-per-domain": 0,
+        "max-pools": 0,
+        "selection": "even"
+    },
+    "experiments": {
+        "seed": 2026,
+        "k-nn": 3,
+        "multiset-stability": true,
+        "a": {
+            "enabled": true,
+            "k": 20,
+            "repeats": 5,
+            "pool-sizes": [
+                25,
+                50,
+                100,
+                200,
+                500,
+                1000
+            ],
+            "k-sweep": [
+                5,
+                10,
+                20,
+                50
+            ]
+        },
+        "b": {
+            "enabled": true,
+            "k": 20,
+            "hidden-draws": 50
+        },
+        "c": {
+            "enabled": true,
+            "k": 20,
+            "step": 0.05,
+            "require-varying-ru": false
+        }
+    }
+}

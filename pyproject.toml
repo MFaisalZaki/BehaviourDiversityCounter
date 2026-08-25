@@ -1,10 +1,17 @@
 [tool.poetry]
 name = "behaviour-diversity-counter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Behaviour diversity counter aimed at unified planning interface"
 authors = ["MFaisalZaki <mustafa.faisal.eng@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+packages = [
+    { include = "behaviour_diversity_counter" },
+    # The paper's evaluation harness. Installed alongside the library so that
+    # `bdcevalcli` is on the PATH of the venv setup_benchmark.sh builds, and so
+    # a compute node runs the same code the sweep was generated from.
+    { include = "paperexps", from = "paper-experiments" },
+]
 
 [tool.poetry.dependencies]
 # Capped below 3.14: unified-planning pulls in scipy, which has no 3.14+ wheels
@@ -13,6 +20,20 @@ python = ">=3.10,<3.14"
 # The only two packages the library imports.
 unified-planning = "^1.3.0"
 lark = "^1.1.9"
+
+# Optional extras. The harness's own analysis is stdlib-only -- the Wilcoxon
+# test is written out in paperexps/stats.py rather than imported -- so a bare
+# compute node needs none of these.
+matplotlib = { version = "^3.6", optional = true }
+scipy = { version = "^1.10", optional = true }
+
+[tool.poetry.extras]
+# `bdcevalcli report`'s figures. `analyze`'s tables run on stdlib alone.
+plots = ["matplotlib"]
+# Only tests/test_stats.py wants scipy, to check the hand-written Wilcoxon
+# against it. The sweep itself never imports it.
+stats = ["scipy"]
+analysis = ["matplotlib", "scipy"]
 
 # Planner engines. Not imported by this package -- it consumes plans rather than
 # producing them -- so they are optional: `poetry install --with planners`.
@@ -26,6 +47,9 @@ up-fast-downward = "^0.4.1"
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
 
+[tool.poetry.scripts]
+bdcevalcli = 'paperexps.cli:main'
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
@@ -33,5 +57,5 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # paper-experiments is on the path so the golden tests can reach the
-# plan-level baseline in paperexps/selectors.py.
+# plan-level baseline in paperexps/baseline.py.
 pythonpath = [".", "paper-experiments"]
