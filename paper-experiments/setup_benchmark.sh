@@ -47,6 +47,7 @@ PARTITION=""
 ACCOUNT=""
 QOS=""
 MAX_PARALLEL="50"
+CHUNK_SIZE="0"                 # 0 = derive from the site's MaxArraySize
 EXTRAS=""
 PACKAGES=""
 LOCAL_JOBS="0"                 # >0 runs the manifests here instead of on slurm
@@ -79,6 +80,7 @@ configuration declares unless --experiment narrows it.
   --account NAME          slurm account   (blank = site default)
   --qos NAME              slurm QOS       (blank = site default)
   --max-parallel N        cap on concurrently running array elements
+  --chunk-size N          elements per array (default: the site's MaxArraySize - 1)
 
   --skip-existing         drop tasks whose result file is already written
   --submit                sbatch each array; without this the commands are printed
@@ -107,6 +109,7 @@ while [ $# -gt 0 ]; do
         --account)          ACCOUNT="$2"; shift 2 ;;
         --qos)              QOS="$2"; shift 2 ;;
         --max-parallel)     MAX_PARALLEL="$2"; shift 2 ;;
+        --chunk-size)       CHUNK_SIZE="$2"; shift 2 ;;
         --skip-existing)    SKIP_EXISTING="yes"; shift ;;
         --submit)           SUBMIT="yes"; shift ;;
         --local-jobs)       LOCAL_JOBS="$2"; shift 2 ;;
@@ -254,6 +257,7 @@ build_experiment() {
     local name="$1"
     local plans_dir tasks_dir ru_info_dir dump_dir jobs_dir log_dir
     local manifest all_tasks total count sbatch_file max_array path_line path_index
+    local chunk chunk_size chunk_count suffix job_name
 
     echo
     say "=== ${name} ==="
@@ -340,37 +344,71 @@ build_experiment() {
         return 0
     fi
 
-    # A site's MaxArraySize caps the highest index, not the element count.
-    # Check it here rather than letting sbatch reject the whole submission.
-    if command -v scontrol >/dev/null 2>&1; then
-        max_array="$(scontrol show config 2>/dev/null | awk -F'= *' '/^MaxArraySize/ {print $2}' | tr -d ' ')"
-        if [ -n "${max_array:-}" ] && [ "$count" -ge "$max_array" ]; then
-            die "${count} elements exceeds this site's MaxArraySize of ${max_array}; split the manifest"
+    # ------------------------------------------------------------ chunking --
+    # A site's MaxArraySize caps the highest array index, so indices run
+    # 1..MaxArraySize-1 and a sweep larger than that has to be submitted as
+    # several arrays. Chunking keeps one element on one task, which is what
+    # makes --time-limit mean anything; the alternative, several tasks per
+    # element, would make the limit depend on how the sweep was divided.
+    chunk_size="$CHUNK_SIZE"
+    if [ "$chunk_size" -eq 0 ] 2>/dev/null; then
+        chunk_size="$count"
+        if command -v scontrol >/dev/null 2>&1; then
+            max_array="$(scontrol show config 2>/dev/null | awk -F'= *' '/^MaxArraySize/ {print $2}' | tr -d ' ')"
+            if [ -n "${max_array:-}" ] && [ "$max_array" -gt 1 ]; then
+                chunk_size=$((max_array - 1))
+            fi
         fi
     fi
+    [ "$chunk_size" -gt 0 ] || die "--chunk-size must be positive"
 
-    # -------------------------------------------------------- the job file --
-    sbatch_file="${jobs_dir}/${name}.sbatch"
-    {
-        echo '#!/usr/bin/env bash'
-        echo "#SBATCH --job-name=bdc-${name}"
-        echo "#SBATCH --array=1-${count}%${MAX_PARALLEL}"
-        echo "#SBATCH --time=${TIME_LIMIT}"
-        echo "#SBATCH --mem=${MEMORY_LIMIT}"
-        echo "#SBATCH --cpus-per-task=${CPUS}"
-        echo "#SBATCH --output=${log_dir}/%x-%A_%a.out"
-        echo "#SBATCH --error=${log_dir}/%x-%A_%a.err"
-        if [ -n "$PARTITION" ]; then echo "#SBATCH --partition=${PARTITION}"; fi
-        if [ -n "$ACCOUNT" ];   then echo "#SBATCH --account=${ACCOUNT}";     fi
-        if [ -n "$QOS" ];       then echo "#SBATCH --qos=${QOS}";             fi
-        cat <<EOF
+    # Clear the previous split as well as its job files: a run with a different
+    # chunk size would otherwise leave scripts pointing at manifests it deleted.
+    rm -f "${jobs_dir}/${name}.chunk."[0-9][0-9][0-9]           "${jobs_dir}/${name}.sbatch"           "${jobs_dir}/${name}."[0-9][0-9][0-9]".sbatch"
+    if [ "$count" -le "$chunk_size" ]; then
+        cp "$manifest" "${jobs_dir}/${name}.chunk.001"
+    else
+        say "splitting ${count} tasks into chunks of ${chunk_size}"
+        awk -v size="$chunk_size" -v prefix="${jobs_dir}/${name}.chunk." '
+            {
+                file = sprintf("%s%03d", prefix, int((NR - 1) / size) + 1)
+                if (file != previous) { if (previous != "") close(previous); previous = file }
+                print > file
+            }' "$manifest"
+    fi
+
+    # -------------------------------------------------------- the job files --
+    for chunk in "${jobs_dir}/${name}.chunk."[0-9][0-9][0-9]; do
+        [ -f "$chunk" ] || continue
+        chunk_count="$(wc -l < "$chunk" | tr -d ' ')"
+        suffix="${chunk##*.}"
+        if [ "$count" -le "$chunk_size" ]; then
+            sbatch_file="${jobs_dir}/${name}.sbatch"
+            job_name="bdc-${name}"
+        else
+            sbatch_file="${jobs_dir}/${name}.${suffix}.sbatch"
+            job_name="bdc-${name}-${suffix}"
+        fi
+        {
+            echo '#!/usr/bin/env bash'
+            echo "#SBATCH --job-name=${job_name}"
+            echo "#SBATCH --array=1-${chunk_count}%${MAX_PARALLEL}"
+            echo "#SBATCH --time=${TIME_LIMIT}"
+            echo "#SBATCH --mem=${MEMORY_LIMIT}"
+            echo "#SBATCH --cpus-per-task=${CPUS}"
+            echo "#SBATCH --output=${log_dir}/%x-%A_%a.out"
+            echo "#SBATCH --error=${log_dir}/%x-%A_%a.err"
+            if [ -n "$PARTITION" ]; then echo "#SBATCH --partition=${PARTITION}"; fi
+            if [ -n "$ACCOUNT" ];   then echo "#SBATCH --account=${ACCOUNT}";     fi
+            if [ -n "$QOS" ];       then echo "#SBATCH --qos=${QOS}";             fi
+            cat <<EOF
 #
 # Generated by setup_benchmark.sh -- re-run it rather than editing this.
 # One element, one task, one result file.
 #
 set -euo pipefail
 
-MANIFEST="${manifest}"
+MANIFEST="${chunk}"
 PAPEREXPS="${PAPEREXPS}"
 PYTHON="${VENV_PYTHON}"
 CONFIG_FILE="${CONFIG_FILE}"
@@ -380,7 +418,7 @@ line="\$(sed -n "\${SLURM_ARRAY_TASK_ID}p" "\$MANIFEST")"
 [ -n "\$line" ] || { echo "no task at manifest line \${SLURM_ARRAY_TASK_ID}" >&2; exit 1; }
 task_id="\${line%%\$'\t'*}"
 
-echo "[\$(date -Is)] \${SLURM_ARRAY_TASK_ID}/${count}  \${task_id}"
+echo "[\$(date -Is)] \${SLURM_ARRAY_TASK_ID}/${chunk_count}  \${task_id}"
 cd "\$PAPEREXPS"
 # exec so slurm's signals reach python rather than this wrapper: a timeout then
 # kills the task itself, and the element's exit status is python's own.
@@ -389,18 +427,18 @@ exec "\$PYTHON" runnner.py \\
     --experiment-name "\$EXPERIMENT" \\
     --task-id "\$task_id"
 EOF
-    } > "$sbatch_file"
-    chmod +x "$sbatch_file"
+        } > "$sbatch_file"
+        chmod +x "$sbatch_file"
+        say "job file ${sbatch_file}  (${chunk_count} tasks)"
+        GENERATED="${GENERATED}${sbatch_file}
+"
+        if [ "$SUBMIT" = "yes" ]; then
+            command -v sbatch >/dev/null 2>&1 || die "sbatch not found on this machine"
+            sbatch "$sbatch_file"
+        fi
+    done
 
     say "manifest ${manifest}"
-    say "job file ${sbatch_file}"
-    GENERATED="${GENERATED}${sbatch_file}
-"
-
-    if [ "$SUBMIT" = "yes" ]; then
-        command -v sbatch >/dev/null 2>&1 || die "sbatch not found on this machine"
-        sbatch "$sbatch_file"
-    fi
 }
 
 for experiment_name in $SELECTED; do
