@@ -49,6 +49,16 @@ POOL_RE = re.compile(
 )
 
 
+def dumpfile_name(taskdetails):
+    """The result file a task writes, derivable without parsing its pool.
+
+    The slurm array reads this to skip tasks already finished, so it has to be
+    answerable from the task record alone.
+    """
+    return (f"{taskdetails['track']}-{taskdetails['year']}-{taskdetails['domain']}"
+            f"-{taskdetails['inst']}-{taskdetails['q']}-{taskdetails['k']}.json")
+
+
 def create_dump_dir(dump_dir):
     dump_dir_path = os.path.join(HERE, dump_dir)
     os.makedirs(dump_dir_path, exist_ok=True)
@@ -311,7 +321,7 @@ def construct_task(taskdetails):
         'k': taskdetails['k'],
         'track': taskdetails['track'],
         'parse-failures': failures,
-        'dumpfile-name': f"{taskdetails['track']}-{taskdetails['year']}-{taskdetails['domain']}-{taskdetails['inst']}-{taskdetails['q']}-{taskdetails['k']}.json"
+        'dumpfile-name': dumpfile_name(taskdetails)
     }
 
     return up_task, up_plans, info
