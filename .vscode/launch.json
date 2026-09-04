@@ -15,7 +15,8 @@
                 "--config-file",
                 "${workspaceFolder}/paper-experiments/paperexps/exp-cfg-files/default.json",
                 "--experiment-name",
-                "runtime"
+                // "runtime"
+                "weights"
             ],
             "justMyCode": false
         }

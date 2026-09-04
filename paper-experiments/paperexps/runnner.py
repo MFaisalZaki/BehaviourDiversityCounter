@@ -1,5 +1,8 @@
 
 from exp_runtime import runtime_experiment
+from exp_weights import weights_experiment
+
+from utils import create_dump_dir, match_plans_with_problems
 
 if __name__ == "__main__":
     import argparse, json
@@ -15,10 +18,13 @@ if __name__ == "__main__":
     exp_parameters = next(filter(lambda e: e['name'] == args.experiment_name, config['experiments']), None)
     assert exp_parameters is not None, f"Experiment '{args.experiment_name}' not found in the configuration file."
 
+    basedir = create_dump_dir(exp_parameters['dump-dir'])
+    tasks   = match_plans_with_problems(exp_parameters['plansdir'], exp_parameters['benchmark'], exp_parameters['ru-info'])
+
     match exp_parameters['name']:
         case 'runtime':
-            runtime_experiment(exp_parameters)
+            runtime_experiment(tasks, basedir, exp_parameters['k-values'])
+        case 'weights':
+            weights_experiment(tasks, basedir, exp_parameters['w-values'], exp_parameters['subset-k-percentage'])
 
     pass
-
-    

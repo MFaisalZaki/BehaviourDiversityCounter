@@ -26,4 +26,5 @@ class NumericFunctionDimension(BehaviourDimension):
             vars_values_over_time[varname] = next(filter(lambda e: current_value >= e[1] and current_value < e[2], boxes), boxes[-1])[0]
 
         val = ','.join([f'{k}:{str(v)}' for k,v in vars_values_over_time.items()])
+        self.domain.add(val)
         return val

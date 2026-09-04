@@ -5,6 +5,7 @@ class MakespanOptimalCostDimension(BehaviourDimension):
         super().__init__(task, 'cb', addinfo, addinfo.get('weight', 1.0))
 
     def plan_behaviour(self, plan):
+        self.domain.add(len(plan.actions))
         return f'{self.name}:' + str(len(plan.actions))
 
     def _cost(self, plan):

@@ -14,6 +14,7 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
             for g in self.vars:
                 _time_step_history[g].append(state.get_value(g).is_true())
         val = '->'.join(map(lambda e: str(e[0]), sorted([(g, next((i for i, x in enumerate(_time_step_history[g]) if x), -1)) for g in self.vars], key=lambda e:e[1])))
+        self.domain.add(val)
         return f'{self.name}:' + val
 
     def distance(self, plan1, plan2):

@@ -7,6 +7,15 @@
             "ru-info": "sandbox/ru-info-dir",
             "benchmark": "sandbox/classical-domains",
             "k-values": [5, 10, 25, 50, 100, 150, 200, 250, 300, 400, 500]
+        },
+        {
+            "name": "weights",
+            "dump-dir": "sandbox/weights",
+            "plansdir":"sandbox/fi-generated-plans-dir",
+            "ru-info": "sandbox/ru-info-dir",
+            "benchmark": "sandbox/classical-domains",
+            "w-values": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+            "subset-k-percentage": 0.05
         }
     ]
 }

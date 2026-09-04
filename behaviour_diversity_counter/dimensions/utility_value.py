@@ -15,4 +15,5 @@ class UtilityValueDimension(BehaviourDimension):
         for var, utils in _acheived_utilities.items():
             achieved_utilities[str(var)] = self.addinfo['utility-goals'][var] if any(utils) else 0
         val = str(sum(achieved_utilities.values())) + ' -- ' + ','.join(f'{k}={str(v)}' for k,v in achieved_utilities.items())
+        self.domain.add(val)
         return f'{self.name}:' + val

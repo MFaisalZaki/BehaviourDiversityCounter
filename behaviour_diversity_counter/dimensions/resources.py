@@ -18,6 +18,7 @@ class ResourceCountDimension(BehaviourDimension):
         # cannot also separate counts within this one. Sorted because addinfo['objects']
         # is a set, whose iteration order varies between processes.
         counts = ','.join(f'{o}={resource_usage[o]}' for o in sorted(resource_usage))
+        self.domain.add(counts)
         return f'{self.name}:' + counts
 
 
@@ -35,6 +36,7 @@ class ResourceUsedDimension(BehaviourDimension):
                 resource_usage[used_resource] += 1
         used = frozenset(o for o, c in resource_usage.items() if c > 0)
         # encode the *set* of used resources so distance() can compute Jaccard.
+        self.domain.add(','.join(sorted(used)))
         return f'{self.name}:' + ','.join(sorted(used))
 
     def _used_set(self, plan):

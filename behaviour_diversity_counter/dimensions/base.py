@@ -12,11 +12,11 @@ def declaration_source(addinfo):
 
 class BehaviourDimension:
     def __init__(self, task, name, addinfo, weight=1.0):
-        self.task = task
-        self.name = name
+        self.task    = task
+        self.name    = name
         self.addinfo = addinfo
-        #: Unweighted unless told otherwise, so a dimension works on its own.
-        self.weight = weight
+        self.weight  = weight
+        self.domain  = set()
 
     def distance(self, b1, b2):
         """This dimension's term of ``d(b, b') = sum_i w_i * d_i(b_i, b'_i)``.

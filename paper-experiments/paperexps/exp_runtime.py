@@ -1,14 +1,11 @@
 
 import json
-import os, tempfile, time
+import os, time
 from collections import defaultdict
-from utils import create_dump_dir, match_plans_with_problems, construct_task
+from utils import construct_task
 from behaviour_diversity_counter.behaviour_diversity_counter import BehaviourDiversityCounter
 
-def runtime_experiment(parameters):
-    basedir = create_dump_dir(parameters['dump-dir'])
-    tasks = match_plans_with_problems(parameters['plansdir'], parameters['benchmark'], parameters['ru-info'])
-
+def runtime_experiment(tasks, basedir, k_values):
     for t in tasks:
         _results = defaultdict(lambda: defaultdict(dict))
         _task, _plans, _info = construct_task(t)
@@ -18,9 +15,13 @@ def runtime_experiment(parameters):
         # warmup behaviour inference
         behaviour_counter.behaviours(_plans)
 
-        for k in parameters['k-values']:
+        print(f"| Running runtime experiment for task: {_info['year']} - {_info['domain']} - {_info['inst']}")
+
+        for k in k_values:
             if k > len(_plans): continue
+            print(f"| -- | Running runtime experiment for k={k} ...")
             for indicator in ['bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty']:
+                print(f"| -- | -- | Using indicator: {indicator} ...")
                 _starttime = time.time()
                 _extracted_plans = behaviour_counter.extract(_plans, k, indicator=indicator)
                 _endtime = time.time()
