@@ -234,16 +234,16 @@ Four things the paper needs that the library did not have, all in
   the user fewer plans — and `extract(..., trace=True)` returns the whole
   k-step trace.
 - `b_coverage` as the primary name for what the paper no longer calls the
-  Behaviour Diversity Count; `bdc()` and the `'bdc'` selector key remain as
-  aliases.
-- Per-dimension `weights`, defaulting to `1/n`. Setting them clears the
-  pair-distance cache, which is keyed by the behaviour pair alone — Experiment C
-  reweights one counter object 21 times per task, and a surviving cache entry
-  would produce 21 identical rows and raise nothing.
-- Opt-in counters — `n_distance_evals` and `n_distance_misses` separately, plus
-  `n_simulator_calls` — for Experiment A. Off by default, and off costs nothing:
-  enabling swaps the hot methods through the instance dictionary rather than
-  leaving a flag to test on every distance lookup.
+  Behaviour Diversity Count. The `bdc()` alias and the `'bdc'` selector key have
+  been removed.
+- Per-dimension weights, defaulting to `1/n`, set through `set_weights()`.
+  Setting them clears the pair-distance cache, which is keyed by the behaviour
+  pair alone — Experiment C reweights one counter object 21 times per task, and
+  a surviving cache entry would produce 21 identical rows and raise nothing.
+
+Experiment A's opt-in distance/simulator counters were removed as unused: no
+`exp_a.py` was ever written against them. Reinstating them is a revert of the
+commit that took them out.
 
 `tests/test_golden.py` holds the paper's worked examples against a stub counter
 needing neither PDDL nor a simulator. If those fail, nothing downstream is

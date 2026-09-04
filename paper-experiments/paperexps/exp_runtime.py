@@ -13,7 +13,7 @@ def runtime_experiment(parameters):
         _results = defaultdict(lambda: defaultdict(dict))
         _task, _plans, _info = construct_task(t)
 
-        behaviour_counter = BehaviourDiversityCounter(_task, [('go', None), ('ru', _info['resources-file'])])
+        behaviour_counter = BehaviourDiversityCounter(_task, [('go', {}), ('ru', {'file': _info['resources-file']})])
 
         # warmup behaviour inference
         behaviour_counter.behaviours(_plans)
@@ -28,6 +28,7 @@ def runtime_experiment(parameters):
                 _results[k][indicator]['num_plans']      = len(_extracted_plans)
                 _results[k][indicator]['num_behaviours'] = len(set([p.behaviour for p in _extracted_plans]))
                 _results[k][indicator]['behaviours']     = [p.behaviour for p in _extracted_plans]
+                _results[k][indicator]['plans']          = [p.plan_str  for p in _extracted_plans]
 
         _dumpfile = os.path.join(basedir, _info['dumpfile-name'])
         with open(_dumpfile, 'w') as f:

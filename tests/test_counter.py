@@ -1,6 +1,7 @@
 """Tests for BehaviourDiversityCounter -- the object that ties the dimensions
-together. It is bound to a task and its dimensions; every indicator (bdc,
-b_maxsum) and the extraction (extract) receive the plan set to work on."""
+together. It is bound to a task and its dimensions; every indicator
+(b_coverage, b_maxsum) and the extraction (extract) receive the plan set to
+work on."""
 
 import pytest
 
@@ -21,7 +22,7 @@ class TestConstruction:
     def test_indicators_accept_any_plan_iterable(self, task, plan_l1_then_l2):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc(iter([plan_l1_then_l2])) == 1
+        assert counter.b_coverage(iter([plan_l1_then_l2])) == 1
 
     def test_unknown_dimension_name_is_rejected(self, task):
         with pytest.raises(ValueError, match='valid keys'):
@@ -34,7 +35,7 @@ class TestBDC:
     ):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc([plan_l1_then_l2, plan_l2_then_l1]) == 2
+        assert counter.b_coverage([plan_l1_then_l2, plan_l2_then_l1]) == 2
 
     def test_plans_agreeing_on_the_dimension_collapse_to_one_behaviour(
         self, task, plan_l1_then_l2, plan_two_trucks
@@ -42,38 +43,38 @@ class TestBDC:
         """Both deliver l1 then l2, so under 'go' alone they are one behaviour."""
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc([plan_l1_then_l2, plan_two_trucks]) == 1
+        assert counter.b_coverage([plan_l1_then_l2, plan_two_trucks]) == 1
 
     def test_adding_a_dimension_separates_previously_equal_plans(
         self, task, resource_file, plan_l1_then_l2, plan_two_trucks
     ):
         counter = BehaviourDiversityCounter(task, [('go', None), ('ru', resource_file)])
 
-        assert counter.bdc([plan_l1_then_l2, plan_two_trucks]) == 2
+        assert counter.b_coverage([plan_l1_then_l2, plan_two_trucks]) == 2
 
     def test_duplicate_plans_count_once(self, task, plan_l1_then_l2):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc([plan_l1_then_l2, plan_l1_then_l2]) == 1
+        assert counter.b_coverage([plan_l1_then_l2, plan_l1_then_l2]) == 1
 
     def test_empty_plan_list_counts_zero(self, task):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc([]) == 0
+        assert counter.b_coverage([]) == 0
 
-    def test_bdc_is_idempotent(self, task, plan_l1_then_l2, plan_l2_then_l1):
+    def test_b_coverage_is_idempotent(self, task, plan_l1_then_l2, plan_l2_then_l1):
         counter = BehaviourDiversityCounter(task, [('go', None)])
         plans = [plan_l1_then_l2, plan_l2_then_l1]
 
-        assert counter.bdc(plans) == counter.bdc(plans) == 2
+        assert counter.b_coverage(plans) == counter.b_coverage(plans) == 2
 
     def test_one_counter_scores_many_plan_sets(
         self, task, plan_l1_then_l2, plan_l2_then_l1
     ):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        assert counter.bdc([plan_l1_then_l2]) == 1
-        assert counter.bdc([plan_l1_then_l2, plan_l2_then_l1]) == 2
+        assert counter.b_coverage([plan_l1_then_l2]) == 1
+        assert counter.b_coverage([plan_l1_then_l2, plan_l2_then_l1]) == 2
 
     def test_behaviour_string_joins_one_token_per_dimension(
         self, task, plan_l1_then_l2
@@ -87,7 +88,7 @@ class TestBDC:
     def test_each_plan_is_annotated_with_its_behaviour(self, task, plan_l1_then_l2):
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
-        counter.bdc([plan_l1_then_l2])
+        counter.b_coverage([plan_l1_then_l2])
 
         assert plan_l1_then_l2.behaviour == 'go:delivered(l1)->delivered(l2)'
 
@@ -132,7 +133,7 @@ class TestExtract:
             [plan_l1_then_l2, plan_l1_then_l2, plan_l2_then_l1], k=2
         )
 
-        assert counter.bdc(subset) == 2
+        assert counter.b_coverage(subset) == 2
         assert counter.b_maxsum(subset) == 1.0
 
     def test_remaining_slots_are_filled_with_duplicate_behaviours(
@@ -154,6 +155,57 @@ class TestExtract:
 
         with pytest.raises(ValueError, match='valid indicators'):
             counter.extract([plan_l1_then_l2], k=1, indicator='nope')
+
+
+class TestDeclaredWeights:
+    """A dimension carries its own weight and applies it; the counter decides
+    what the values are, because every rule about them is a rule about the set.
+    """
+
+    def test_a_dimension_declares_its_weight_in_addinfo(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        """The two plans reverse the goal order at equal cost, so `go` scores
+        them 1.0 apart and `cb` 0.0. Under the declared 1/4 the pair is 0.25;
+        under the uniform default it would be 0.5."""
+        counter = BehaviourDiversityCounter(
+            task, [('go', {'weight': 0.25}), ('cb', {'weight': 0.75})])
+
+        assert counter.b_maxsum([plan_l1_then_l2, plan_l2_then_l1]) == pytest.approx(0.25)
+
+    def test_declaring_is_all_or_nothing(self, task):
+        with pytest.raises(ValueError, match=r"no weight given for dimension\(s\): \['cb'\]"):
+            BehaviourDiversityCounter(task, [('go', {'weight': 1.0}), ('cb', None)])
+
+    def test_an_explicit_argument_overrides_the_declaration(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        counter = BehaviourDiversityCounter(
+            task, [('go', {'weight': 0.25}), ('cb', {'weight': 0.75})],
+            weights={'go': 1.0, 'cb': 0.0})
+
+        assert counter.b_maxsum([plan_l1_then_l2, plan_l2_then_l1]) == pytest.approx(1.0)
+
+    def test_set_weights_still_reweights_a_live_counter(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        """The sweep reweights one counter rather than rebuilding it, so the
+        pair-distance cache has to be cleared on the way through."""
+        counter = BehaviourDiversityCounter(
+            task, [('go', {'weight': 0.25}), ('cb', {'weight': 0.75})])
+        pair = [plan_l1_then_l2, plan_l2_then_l1]
+        assert counter.b_maxsum(pair) == pytest.approx(0.25)
+
+        counter.set_weights({'go': 1.0, 'cb': 0.0})
+
+        assert counter.b_maxsum(pair) == pytest.approx(1.0)
+
+    def test_no_declaration_leaves_the_uniform_default(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        counter = BehaviourDiversityCounter(task, [('go', None), ('cb', None)])
+
+        assert counter.b_maxsum([plan_l1_then_l2, plan_l2_then_l1]) == pytest.approx(0.5)
 
 
 class TestExtractBMaxSum:
@@ -188,6 +240,31 @@ class TestExtractBMaxSum:
         selected = counter.extract([cost2, cost3, cost4], k=2, indicator='bmaxsum')
 
         assert {p.behaviour for p in selected} == {'cb:2', 'cb:4'}
+
+    def test_the_greedy_opens_on_the_farthest_pair_not_the_first_plan(
+        self, task, domain, make_plan
+    ):
+        """The opening pick is the better half of the farthest pair, not plan 0.
+
+        Costs {5, 2, 10}, in that pool order. Every singleton sums to zero, so
+        the opening pick gets no signal from the objective at all -- and the
+        rule B-MaxSum is trying to maximise says to take the pair that sums
+        highest. That is {2, 10}, at |2 - 10| / 10 = 0.8. Opening on plan 0
+        instead and then taking its farthest neighbour gives {5, 2}, at
+        |5 - 2| / 5 = 0.6, which is simply a worse answer to the question asked.
+        """
+        move, drop = domain['move'], domain['drop']
+        tr1, l0, l1, l2 = domain['tr1'], domain['l0'], domain['l1'], domain['l2']
+        cycle = [(move, (tr1, l0, l1)), (move, (tr1, l1, l2)), (move, (tr1, l2, l0))]
+        cost2 = make_plan((move, (tr1, l0, l1)), (drop, (tr1, l1)))
+        cost5 = make_plan(*(cycle * 2)[:5])
+        cost10 = make_plan(*(cycle * 4)[:10])
+        counter = BehaviourDiversityCounter(task, [('cb', None)])
+
+        selected = counter.extract([cost5, cost2, cost10], k=2, indicator='bmaxsum')
+
+        assert {p.behaviour for p in selected} == {'cb:2', 'cb:10'}
+        assert counter.b_maxsum(selected) == pytest.approx(0.8)
 
     def test_duplicates_are_picked_only_when_the_pool_is_exhausted(
         self, task, plan_l1_then_l2, plan_l2_then_l1
@@ -311,7 +388,7 @@ class TestCaching:
         original = counter._simulate
         counter._simulate = lambda plan: (simulations.append(plan), original(plan))[1]
 
-        counter.bdc([plan_l1_then_l2])
+        counter.b_coverage([plan_l1_then_l2])
         counter.b_maxsum([plan_l1_then_l2])
         counter.extract([plan_l1_then_l2], k=1)
 
@@ -361,7 +438,7 @@ class TestInapplicablePlans:
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
         with pytest.raises(InapplicablePlanError):
-            counter.bdc([plan_l1_then_l2, inapplicable_plan])
+            counter.b_coverage([plan_l1_then_l2, inapplicable_plan])
 
     def test_b_maxsum_on_an_inapplicable_plan_raises(
         self, task, plan_l1_then_l2, inapplicable_plan
@@ -387,4 +464,4 @@ class TestInapplicablePlans:
         counter = BehaviourDiversityCounter(task, [('go', None)])
 
         with pytest.raises(InapplicablePlanError, match='at step 1'):
-            counter.bdc([plan])
+            counter.b_coverage([plan])

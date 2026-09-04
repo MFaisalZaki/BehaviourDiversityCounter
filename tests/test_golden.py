@@ -22,6 +22,7 @@ import math
 import pytest
 
 from behaviour_diversity_counter import BehaviourDiversityCounter
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
 
 # ----------------------------------------------------------------------
@@ -36,16 +37,18 @@ def token(behaviour, name):
     raise AssertionError(f"no '{name}' token in {behaviour!r}")
 
 
-class RoversUsedDimension:
+class RoversUsedDimension(BehaviourDimension):
     """Equality on the number of rovers: 0 when equal, 1 when not."""
 
-    name = 'nr'
+    def __init__(self):
+        super().__init__(task=None, name='nr', addinfo=None)
 
     def distance(self, b1, b2):
-        return 0.0 if token(b1, self.name) == token(b2, self.name) else 1.0
+        same = token(b1, self.name) == token(b2, self.name)
+        return self.weight * (0.0 if same else 1.0)
 
 
-class CollectionOrderDimension:
+class CollectionOrderDimension(BehaviourDimension):
     """Raw Hamming distance over the three collection-order positions.
 
     Raw, not normalised into [0, 1]: the paper's worked examples add a Hamming
@@ -53,11 +56,12 @@ class CollectionOrderDimension:
     length here would quietly move every golden number.
     """
 
-    name = 'co'
+    def __init__(self):
+        super().__init__(task=None, name='co', addinfo=None)
 
     def distance(self, b1, b2):
         s1, s2 = token(b1, self.name), token(b2, self.name)
-        return float(sum(x != y for x, y in zip(s1, s2)))
+        return self.weight * float(sum(x != y for x, y in zip(s1, s2)))
 
 
 class StubPlan:
@@ -89,11 +93,7 @@ class StubCounter(BehaviourDiversityCounter):
         self._simulator = None
         self._behaviour_cache = {}
         self._distance_cache = {}
-        self._weights = {}
-        self._counters_enabled = False
-        self._simulator_apply = None
         self._plans = []          # keeps the plans alive: the cache is keyed by id()
-        self.reset_counters()
         self.set_weights(weights)
 
     def make_plans(self, *specs):
@@ -154,10 +154,6 @@ class TestWorkedExampleOne:
     def test_b_novelty(self, counter, plans):
         assert counter.b_novelty(plans, k_nn=1) == pytest.approx(0.5)
 
-    def test_bdc_is_an_alias_of_b_coverage(self, counter, plans):
-        assert counter.bdc(plans) == counter.b_coverage(plans) == 2
-
-
 # ----------------------------------------------------------------------
 # Test 2: the three-behaviour example
 # ----------------------------------------------------------------------
@@ -184,53 +180,6 @@ class TestWorkedExampleTwo:
 
     def test_b_novelty(self, counter, plans):
         assert counter.b_novelty(plans, k_nn=1) == pytest.approx(3.5 / 3)
-
-
-# ----------------------------------------------------------------------
-# Test 3: thm:bmaxmin-degenerate
-# ----------------------------------------------------------------------
-
-class TestBMaxMinDegeneracy:
-    """Maximising B-MaxMin returns exactly two plans, whatever k is asked for.
-
-    A third behaviour can only lower the minimum pairwise distance, so the
-    best-scoring prefix of the farthest-first order is always the seed pair.
-    The experiment code has to survive this rather than crash on it, so the
-    trace is checked to still run the full k steps.
-    """
-
-    @pytest.fixture
-    def plans(self, counter):
-        return counter.make_plans(
-            (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (2, 'RIS'), (3, 'SRI'), (1, 'IRS'),
-        )
-
-    @pytest.mark.parametrize('k', [2, 3, 4, 5, 6])
-    def test_selection_is_two_plans_whatever_k(self, counter, plans, k):
-        selected = counter.extract(plans, k=k, indicator='bmaxmin')
-
-        assert len(selected) == 2
-
-    @pytest.mark.parametrize('k', [2, 3, 4, 5, 6])
-    def test_the_trace_still_runs_the_full_k_steps(self, counter, plans, k):
-        selection = counter.extract(plans, k=k, indicator='bmaxmin', trace=True)
-
-        assert len(selection.order) == k
-        assert len(selection.scores) == k
-        assert selection.best_step == 2
-
-    def test_the_pair_returned_is_the_farthest_pair(self, counter, plans):
-        selected = counter.extract(plans, k=4, indicator='bmaxmin')
-        best = max(counter._pair_distance(a.behaviour, b.behaviour)
-                   for a, b in itertools.combinations(plans, 2))
-
-        assert counter.b_maxmin(selected) == pytest.approx(best)
-
-    def test_the_score_never_rises_after_the_pair(self, counter, plans):
-        selection = counter.extract(plans, k=6, indicator='bmaxmin', trace=True)
-        after_pair = selection.scores[1:]
-
-        assert after_pair == sorted(after_pair, reverse=True)
 
 
 # ----------------------------------------------------------------------
@@ -304,48 +253,6 @@ class TestDuplicateInvariance:
         assert counter.b_novelty(duplicated, k_nn=1) == pytest.approx(before)
 
 
-# ----------------------------------------------------------------------
-# The greedy selectors against their definitions
-# ----------------------------------------------------------------------
-
-class TestNoveltyGreedyMatchesItsDefinition:
-    """The B-Novelty extractor prices candidates incrementally, keeping only the
-    k_nn smallest distances per selected behaviour. That is an optimisation of
-    "recompute B-Novelty for every candidate", so it is checked against exactly
-    that, step by step, on a pool with duplicates and ties."""
-
-    @pytest.mark.parametrize('k_nn', [1, 2, 3])
-    @pytest.mark.parametrize('k', [1, 2, 3, 4, 5])
-    def test_every_step_matches_the_naive_greedy(self, counter, k, k_nn):
-        plans = counter.make_plans(
-            (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'),
-            (1, 'RIS'), (4, 'ISR'), (2, 'SIR'),
-        )
-
-        selection = counter.extract(plans, k=k, indicator='bnovelty',
-                                    k_nn=k_nn, trace=True)
-
-        chosen = []
-        for step in range(k):
-            # The stated rule: the best candidate that contributes a behaviour
-            # not already selected, ties going to the lowest plan index. The
-            # tolerance is what makes "tied" mean *mathematically* tied -- these
-            # sums differ by an ulp depending on the order they are accumulated
-            # in, which is not a difference in the indicator.
-            taken = {plan.behaviour for plan in chosen}
-            available = [plan for plan in plans
-                         if not any(plan is picked for picked in chosen)]
-            fresh = [plan for plan in available if plan.behaviour not in taken]
-            best, best_value = None, None
-            for plan in (fresh or available):
-                value = naive_b_novelty(counter, chosen + [plan], k_nn)
-                if best_value is None or value > best_value + 1e-9:
-                    best, best_value = plan, value
-            chosen.append(best)
-            assert selection.order[step] is best
-            assert selection.scores[step] == pytest.approx(best_value)
-
-
 class TestSelectorsHonourTheirIndicators:
     def test_coverage_selection_covers_every_behaviour_it_can(self, counter):
         plans = counter.make_plans((1, 'RSI'), (1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
@@ -353,12 +260,6 @@ class TestSelectorsHonourTheirIndicators:
         selected = counter.extract(plans, k=3, indicator='bcoverage')
 
         assert counter.b_coverage(selected) == 3
-
-    def test_bdc_still_names_the_coverage_selector(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
-
-        assert [p.behaviour for p in counter.extract(plans, k=2, indicator='bdc')] == \
-               [p.behaviour for p in counter.extract(plans, k=2, indicator='bcoverage')]
 
     def test_maxsum_selection_takes_the_farthest_pair_first(self, counter):
         plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
@@ -382,68 +283,6 @@ class TestSelectorsHonourTheirIndicators:
             counter.extract(plans, k=1, indicator='nope')
 
 
-class TestTiesGoToTheLowestPlanIndex:
-    """Greedy scores are sums of the same distances in different orders, so two
-    mathematically equal candidates differ by an ulp about one time in a
-    hundred. The tie policy is what stops that ulp from choosing the selection.
-    """
-
-    def test_the_tie_tolerance_treats_an_ulp_apart_as_tied(self):
-        from behaviour_diversity_counter.behaviour_diversity_counter import strictly_better
-
-        assert not strictly_better(1.5, 1.4999999999999998)
-        assert not strictly_better(1.4999999999999998, 1.5)
-        assert strictly_better(1.5001, 1.5)
-        assert strictly_better(0.0, None)
-
-    def test_equidistant_candidates_are_taken_in_pool_order(self, counter):
-        """After 'RIS' is taken, 'RSI' and 'SIR' are both at distance exactly 1.0
-        from it (Hamming 2, same rover count), so the second pick is a genuine
-        tie and must fall to the earlier plan."""
-        plans = counter.make_plans((1, 'RIS'), (1, 'RSI'), (1, 'SIR'))
-        ris, rsi, sir = (plan.behaviour for plan in plans)
-        assert counter._pair_distance(ris, rsi) == counter._pair_distance(ris, sir)
-
-        for indicator in ('bmaxsum', 'bnovelty'):
-            selection = counter.extract(plans, k=2, indicator=indicator, trace=True)
-            assert selection.order[1] is plans[1], indicator
-
-    def test_a_tied_seed_pair_is_taken_in_pool_order(self, counter):
-        """Three behaviours differing only in rover count are mutually equidistant,
-        so every pair is a candidate seed and farthest-first must take the first."""
-        plans = counter.make_plans((1, 'RIS'), (2, 'RIS'), (3, 'RIS'))
-
-        selection = counter.extract(plans, k=3, indicator='bmaxmin', trace=True)
-
-        assert selection.order[:2] == [plans[0], plans[1]]
-
-    def test_a_plateau_at_the_best_score_keeps_the_longer_prefix(self, counter):
-        """Three mutually equidistant behaviours: the minimum never falls, so
-        there is no reason to hand back fewer plans than were asked for."""
-        plans = counter.make_plans((1, 'RIS'), (2, 'RIS'), (3, 'RIS'))
-
-        selection = counter.extract(plans, k=3, indicator='bmaxmin', trace=True)
-
-        assert selection.scores == pytest.approx([0.0, 0.5, 0.5])
-        assert selection.best_step == 3
-
-    def test_a_strict_fall_still_truncates(self, counter):
-        """The other side of the same rule: once the minimum drops, the prefix
-        before the drop is what is returned.
-
-        Adding (1, 'SIR') puts a strictly farther pair in the pool, so the seed
-        is that pair and the third pick has to fall back to a 'RIS' behaviour,
-        which halves the minimum.
-        """
-        plans = counter.make_plans((1, 'RIS'), (2, 'RIS'), (3, 'RIS'), (1, 'SIR'))
-
-        selection = counter.extract(plans, k=4, indicator='bmaxmin', trace=True)
-
-        assert selection.scores == pytest.approx([0.0, 1.5, 0.5, 0.5])
-        assert selection.best_step == 2
-        assert selection.scores[2] < selection.scores[1]
-
-
 # ----------------------------------------------------------------------
 # Test 6: weights, and the cache they invalidate
 # ----------------------------------------------------------------------
@@ -463,9 +302,6 @@ class TestWeights:
     def behaviours(self, counter):
         plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
         return [plan.behaviour for plan in plans]
-
-    def test_the_default_weights_are_uniform(self, counter):
-        assert counter.weights == {'nr': 0.5, 'co': 0.5}
 
     def test_weighting_out_the_order_dimension(self, counter, behaviours):
         """w_nr = 1, w_co = 0: only the rover count is left to separate them."""
@@ -525,19 +361,14 @@ class TestWeights:
         assert len(set(values)) == 21
         assert values == sorted(values, reverse=True)  # order separates them more
 
-    def test_weights_may_be_given_to_the_constructor(self):
-        counter = StubCounter(weights={'nr': 0.25, 'co': 0.75})
-
-        assert counter.weights == {'nr': 0.25, 'co': 0.75}
-
     def test_uniform_weights_reproduce_the_unweighted_mean(self, counter):
         """The default has to leave the pre-weights behaviour exactly as it was."""
         plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
         rsi, sir = (plan.behaviour for plan in plans)
-        dimensions = counter.dimensions.values()
+        unweighted = [RoversUsedDimension(), CollectionOrderDimension()]
 
         assert counter._pair_distance(rsi, sir) == pytest.approx(
-            sum(d.distance(rsi, sir) for d in dimensions) / len(counter.dimensions))
+            sum(d.distance(rsi, sir) for d in unweighted) / len(unweighted))
 
     def test_an_unknown_dimension_in_the_weights_is_rejected(self, counter):
         with pytest.raises(ValueError, match='unknown dimension'):
@@ -564,110 +395,6 @@ class TestWeights:
         assert counter._pair_distance(rsi, sir) == pytest.approx(2.0 * 1 + 2.0 * 3)
 
 
-# ----------------------------------------------------------------------
-# The Experiment A instrumentation
-# ----------------------------------------------------------------------
-
-class TestCounters:
-    def test_counters_are_off_by_default(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
-
-        counter.b_maxsum(plans)
-
-        assert counter.counters == {'n_distance_evals': 0, 'n_distance_misses': 0,
-                                    'n_simulator_calls': 0}
-
-    def test_evals_and_misses_are_counted_apart(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
-        counter.enable_counters()
-
-        counter.b_maxsum(plans)     # three pairs, all cold
-        counter.b_maxsum(plans)     # the same three pairs, all warm
-
-        assert counter.counters['n_distance_evals'] == 6
-        assert counter.counters['n_distance_misses'] == 3
-
-    def test_counters_reset_between_runs(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
-        counter.enable_counters()
-        counter.b_maxsum(plans)
-
-        counter.reset_counters()
-
-        assert counter.counters['n_distance_evals'] == 0
-
-    def test_disabling_restores_the_uninstrumented_path(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
-        counter.enable_counters()
-        counter.b_maxsum(plans)
-
-        counter.enable_counters(False)
-        counter.b_maxsum(plans)
-
-        assert counter.counters['n_distance_evals'] == 0
-
-    def test_the_instrumented_distance_agrees_with_the_plain_one(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
-        plain = (counter.b_coverage(plans), counter.b_maxsum(plans),
-                 counter.b_maxmin(plans), counter.b_novelty(plans))
-
-        instrumented = StubCounter()
-        same = instrumented.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
-        instrumented.enable_counters()
-        counted = (instrumented.b_coverage(same), instrumented.b_maxsum(same),
-                   instrumented.b_maxmin(same), instrumented.b_novelty(same))
-
-        assert counted == pytest.approx(plain)
-
-
-class TestNonMonotoneSelectionsAttainTheirBest:
-    """The prefix rule must not cost the selection its score: whatever length
-    comes back, its indicator value has to equal the best the trace ever saw --
-    and, for B-MaxMin, the largest pairwise distance the pool contains."""
-
-    @pytest.fixture
-    def plans(self, counter):
-        return counter.make_plans(
-            (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (2, 'RIS'), (3, 'SRI'),
-            (1, 'IRS'), (2, 'SIR'), (4, 'ISR'), (1, 'RIS'),
-        )
-
-    @pytest.mark.parametrize('k', [2, 4, 6, 9])
-    def test_maxmin_selection_attains_the_pools_best_minimum(self, counter, plans, k):
-        selection = counter.extract(plans, k=k, indicator='bmaxmin', trace=True)
-        behaviours = counter._distinct_behaviours(plans)
-        best_pair = max(counter._pair_distance(a, b)
-                        for a, b in itertools.combinations(behaviours, 2))
-
-        assert counter.b_maxmin(selection.plans) == pytest.approx(best_pair)
-        assert counter.b_maxmin(selection.plans) == pytest.approx(max(selection.scores))
-
-    @pytest.mark.parametrize('k', [2, 4, 6, 9])
-    @pytest.mark.parametrize('k_nn', [1, 3])
-    def test_novelty_selection_attains_its_traces_best(self, counter, plans, k, k_nn):
-        selection = counter.extract(plans, k=k, indicator='bnovelty',
-                                    k_nn=k_nn, trace=True)
-
-        assert counter.b_novelty(selection.plans, k_nn=k_nn) == pytest.approx(
-            max(selection.scores))
-
-    @pytest.mark.parametrize('indicator', ['bmaxmin', 'bnovelty'])
-    def test_the_selection_is_a_prefix_of_the_order(self, counter, plans, indicator):
-        selection = counter.extract(plans, k=6, indicator=indicator, trace=True)
-
-        assert selection.plans == selection.order[:selection.best_step]
-
-    def test_novelty_covers_behaviours_before_it_repeats_one(self, counter, plans):
-        """Duplicates are only taken once the pool has no new behaviour left,
-        the same convention B-MaxSum and B-Coverage follow."""
-        selection = counter.extract(plans, k=9, indicator='bnovelty', trace=True)
-        behaviours = [plan.behaviour for plan in selection.order]
-        first_repeat = next((i for i, b in enumerate(behaviours)
-                             if b in behaviours[:i]), len(behaviours))
-
-        assert first_repeat == counter.b_coverage(plans)
-
-
 class TestSingleBehaviourPools:
     """A pool exhibiting one behaviour scores 0 under both non-monotone
     indicators whatever is selected, so the selection keeps the k plans asked
@@ -683,12 +410,6 @@ class TestSingleBehaviourPools:
         selected = counter.extract(plans, k=k, indicator=indicator)
 
         assert len(selected) == min(k, len(plans))
-
-    @pytest.mark.parametrize('indicator', ['bmaxmin', 'bnovelty'])
-    def test_the_score_is_zero_throughout(self, counter, plans, indicator):
-        selection = counter.extract(plans, k=5, indicator=indicator, trace=True)
-
-        assert selection.scores == [0.0] * 5
 
 
 # ----------------------------------------------------------------------

@@ -293,9 +293,11 @@ def construct_task(taskdetails):
     for index, text in enumerate(pool_data.get('plans') or []):
         try:
             up_plans.append(reader.parse_plan_string(up_task, text))
+            setattr(up_plans[-1], 'plan_str', text)
         except Exception:
             try:
                 up_plans.append(reader.parse_plan_string(up_task, denormalise(text)))
+                setattr(up_plans[-1], 'plan_str', text)
             except Exception as error:
                 failures.append({'index': index, 'error': f'{type(error).__name__}: {error}'})
 

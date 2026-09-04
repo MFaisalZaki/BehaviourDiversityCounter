@@ -12,8 +12,7 @@ From a set of plans you can then get the paper's four indicators, every one of t
 computed over the **distinct** behaviours, so a duplicate plan changes none of them:
 
 - `b_coverage(plans)` — B-Coverage: how many distinct behaviours the set actually
-  covers. (`bdc(plans)` is a deprecated alias, under the indicator's former name,
-  Behaviour Diversity Count.)
+  covers. (The paper formerly called this the Behaviour Diversity Count.)
 - `b_maxsum(plans)` — B-MaxSum: the sum of pairwise distances between the distinct
   behaviours.
 - `b_maxmin(plans)` — B-MaxMin: the smallest pairwise distance. Fewer than two
@@ -122,11 +121,23 @@ BehaviourDiversityCounter(task, dimensions, weights=None)
 | `dimensions` | an iterable of `(dimension_key, addinfo)` pairs — see below |
 | `weights` | `{dimension_key: float}` for the separable distance `d(b, b') = Σᵢ wᵢ · dᵢ(bᵢ, b'ᵢ)`; `None` gives the uniform `1/n`, under which the distance is the mean over the dimensions |
 
+A dimension can also declare its own weight in its `addinfo` — `('go', {'weight': 0.25})`,
+or `('ru', {'file': path, 'weight': 0.75})` for the dimensions that take a declaration
+file. Declaring is all or nothing: a partial declaration raises the same error as a
+partial `weights` argument.
+
+Each dimension **holds and applies** its own weight inside `distance()`, so the counter
+only sums what the dimensions hand it. `weight` defaults to `1.0`, so a dimension built on
+its own scores unscaled in `[0, 1]`. What the counter owns is *deciding* the values, since
+every rule about them is a rule about the whole set: the uniform default needs `n`, a
+missing or unknown weight is only visible against the other dimensions, and the
+pair-distance cache has to be cleared when they change.
+
 `counter.set_weights({...})` changes them afterwards, and clears the pair-distance
 cache as it does — that cache is keyed by the behaviour pair alone, so a surviving
 entry would answer with the previous weight vector and say nothing about it.
 
-The plan sets are not held by the counter: `bdc`, `b_maxsum`, `behaviours` and `extract`
+The plan sets are not held by the counter: `b_coverage`, `b_maxsum`, `behaviours` and `extract`
 each take any iterable of `SequentialPlan` as an argument. Each plan is replayed through
 a `SequentialSimulator`, and each dimension turns the resulting state trace into a token.
 The tokens are joined with ` $$ ` into one behaviour string per plan, which is attached
@@ -147,22 +158,15 @@ never recompute a distance they have already seen.
 | `fn` | `NumericFunctionDimension` | path to a `(:function ...)` file | `fuel:8` |
 
 **`go` — goal ordering.** The order in which the goal predicates first become true.
-Its estimate is `len(goals)!`. Goals never achieved sort to the front (index `-1`).
-`GoalPredicatesOrderingDimension` is a thin specialisation of
-`LandmarkPredicatesOrderingDimension`, which can order any predicate set; only the goal
-variant is wired into `dimensions_map`.
+Goals never achieved sort to the front (index `-1`).
 
-**`cb` — cost / makespan.** Plan length. `q` is the bound relative to the cheapest plan
-seen: `q = 1.0` means optimal-only (estimate `1`), `q = 1.5` admits costs up to
-`int(1.5 × optimal)`. The estimate reads `min(self.domain)`, so it is only meaningful
-after the plans have been walked.
+**`cb` — cost / makespan.** Plan length. Its `addinfo` is unread — `('cb', None)`,
+`('cb', {})` and `('cb', {'q': 1.0})` all behave identically.
 
 **`rc` / `ru` — resources.** Both read the same file and look at which objects named in it
 appear as action parameters. `rc` keeps the per-object *counts*, emitted in sorted order so
 the string is stable across processes; `ru` keeps only the *set* of objects used, so it
-ignores how heavily each was used. Both estimate `2^n - 1` non-empty subsets — note this is
-computed by materialising every subset, so it is exponential in the number of declared
-resources.
+ignores how heavily each was used.
 
 **`uv` — utility value.** Sums the weights of goals that were *ever* true along the trace,
 not just at the end. Keys are goal expressions, not strings.
@@ -215,7 +219,16 @@ unordered pair of the distinct behaviours that remain. It is a sum over pairs, n
 average, so it grows with the number of distinct behaviours and can exceed `1`. Fewer
 than two distinct behaviours score `0.0`, as they do under `b_maxmin` and `b_novelty`.
 
-Three dimensions implement `distance()`, each normalised into `[0, 1]` so they combine
+**On `k_nn = 3`.** Novelty search uses 15 and NSLC 20, but those count neighbours in a
+population and archive of thousands. Here the neighbours come from the distinct
+behaviours of one pool — tens — and `k_nn` is clamped to `b - 1`. Measured over random
+pools, `k_nn = 15` makes B-Novelty *exactly* the mean pairwise distance (B-MaxSum over
+`C(b, 2)`) for **100%** of pools with 16 or fewer behaviours; `k_nn = 3` never does above
+four. Above the clamp the choice barely matters — at `b = 40` the overlap between the
+B-Novelty and B-MaxSum selections is ~0.15 whether `k_nn` is 1, 3, 15 or 20 — so the only
+thing the field's value would buy here is a second name for B-MaxSum on small pools.
+
+Three dimensions implement `distance()`, each normalised into `[0, 1]` before its weight so they combine
 sensibly under uniform weights:
 
 | dimension | distance |
@@ -232,20 +245,62 @@ but `b_coverage` can only be computed over dimension sets drawn from `go`, `cb` 
 `extract(plans, k, indicator=..., k_nn=3, trace=False)` selects `k` plans from the given
 pool, maximising the chosen indicator:
 
-- `'bcoverage'` (default; `'bdc'` is an alias) scans the pool in order and takes a plan
+- `'bcoverage'` (the default) scans the pool in order and takes a plan
   only when its behaviour has not been seen yet. Once every behaviour is covered, the
   remaining slots are filled with duplicates, which leave the indicator unchanged. It
   calls no distance function at all.
-- `'bmaxsum'` is greedy: it repeatedly adds the plan whose behaviour has the greatest
-  summed distance to the behaviours already selected. The first pick is arbitrary, since
-  singleton sets score zero, and duplicates gain nothing, so they are only picked once
-  every remaining candidate repeats a selected behaviour.
-- `'bmaxmin'` is farthest-first: it starts from the pair of behaviours at maximum
-  distance, then repeatedly adds the plan whose behaviour maximises the minimum distance
-  to those already chosen.
+- `'bmaxsum'` and `'bmaxmin'` are **one greedy rule under two aggregators**, after the
+  shape [IBM diversescore](https://github.com/IBM/diversescore) uses — there, one scoring
+  routine takes an `aggregator_metric` instead of each metric bringing its own
+  implementation. Both keep, per candidate plan, the aggregate distance from its
+  behaviour to the behaviours already selected, take the best candidate, then fold the
+  newly selected behaviour into what remains. The aggregator is the only thing that
+  changes inside the loop, and it is the same operator in both places it is applied:
+
+  | indicator | aggregator | monotone |
+  | --- | --- | --- |
+  | `'bmaxsum'` | `+` | yes |
+  | `'bmaxmin'` | `min` | no |
+
+  **Both open on the farthest pair.** A singleton set has no pairs, so it scores zero
+  under either operator — the opening pick gets no signal from the objective, and
+  something has to supply one. Under `min` the opening pair *is* the value of the
+  selection and no later pick can raise it, so a bad start caps the whole run. Under `+`
+  the seed is one summand among C(k, 2), so it matters less — but not so little that
+  opening on plan 0 is defensible:
+
+  | B-MaxSum, against brute force | opening on plan 0 | opening on the farthest pair |
+  | --- | --- | --- |
+  | reaches the optimum | 47.3% | **89.3%** |
+  | mean ratio to optimum | 0.939 | **0.997** |
+  | worst case observed | 0.508 | **0.866** |
+
+  (7,713 random pools over a Euclidean metric; the same comparison over the paper's own
+  `nr`/`co` dimensions gives 70.8% → 83.1%.) B-MaxSum opened on plan 0 until this was
+  measured. The seed costs O(b²) distance evaluations against the loop's O(b·k) — at
+  b = 1000, k = 5 about 100× the distance calls, paid once into the cache the loop reads.
+
+  Adding a rule of this family is one row in `extract`'s indicator table, naming its
+  operator — never another selection loop. Whether a rule is monotone is not declared
+  anywhere: it is read off its own score trace, so a rule cannot claim a monotonicity its
+  scores do not show.
 - `'bnovelty'` is greedy on B-Novelty, over the plans that contribute a behaviour not
-  already selected — the same convention the other two follow, and B-Novelty is the one
+  already selected — the same convention the others follow, and B-Novelty is the one
   indicator that needs it stated, being the one a duplicate leaves *exactly* unchanged.
+  It does not share the loop above: its candidate value is not a fold over a per-candidate
+  aggregate but a recomputation over the selection plus the candidate.
+
+Under every rule, a candidate repeating an already selected behaviour scores zero, so
+duplicates are taken only once every remaining candidate repeats one. Under `min` that
+falls straight out of the aggregate — the distance from a behaviour to itself is zero —
+and under `+` it is imposed.
+
+Once taken, a duplicate leaves the running score exactly where it stood. Every indicator
+here reads only the *distinct* behaviours, so a repeat cannot change one, and the trace
+has to say so: `scores[i]` is the indicator of `order[:i + 1]`, and the prefix rule reads
+the trace to decide how many plans to return. Folding a duplicate's zero into the running
+value instead would crash the minimum to zero under `min` and drop a tail of plans that
+cost the indicator nothing.
 
 Like the distance itself, all but `'bcoverage'` are only defined over `go`, `cb` and `ru`.
 
@@ -272,38 +327,7 @@ greedy scores are sums of the same distances accumulated in different orders, so
 mathematically equal candidates routinely differ by one unit in the last place, and
 letting that decide the pick is reproducible but not stable.
 
-## Instrumentation
-
-`counter.enable_counters()` turns on three per-run counters, for measuring where the
-time goes:
-
-| counter | counts |
-| --- | --- |
-| `n_distance_evals` | calls to the pairwise behaviour distance |
-| `n_distance_misses` | those that missed the cache and were actually computed |
-| `n_simulator_calls` | `SequentialSimulator.apply` calls |
-
-Calls and misses are counted apart because the cache is what makes a behaviour distance
-cheap — there are only `b` behaviour strings to compare, however many plans exhibit them.
-`reset_counters()` zeroes them between runs, `counter.counters` reads them, and
-`enable_counters(False)` turns them off again. They are off by default, and off costs
-nothing at all: enabling swaps the hot methods through the instance dictionary rather
-than leaving a flag to test on every distance lookup.
-
 ## Known issues
-
-**The `uv` domain estimate is not a true upper bound.** Each dimension can estimate its
-domain size (`_estimate_domain()` / `estimated_domain_size`); the counter no longer
-aggregates these, but they remain part of the dimension interface.
-`UtilityValueDimension._estimate_domain` builds each candidate as
-`sum -- <all declared utilities>`, and that second part is identical for every subset, so
-the set collapses to the distinct achievable *sums*. But `plan_behaviour` encodes *which*
-goals were achieved, which distinguishes subsets that share a sum: two goals worth `5`
-each give an `estimated_domain_size` of `2` (the sums `5` and `10`) against `3` real
-behaviours (l1 only, l2 only, both). The same routine also enumerates subsets from
-`r = 1`, excluding the empty one, so a plan that achieves nothing has no candidate either.
-Fixing it means encoding candidates the way `plan_behaviour` does, and deciding whether
-the empty subset counts as a behaviour.
 
 **B-MaxSum is only defined over `go`, `cb` and `ru`.** The other three dimensions have no
 `distance()` and raise `AssertionError` — see the B-MaxSum metric section.
@@ -337,9 +361,9 @@ poetry run pytest
 
 ```
 tests/conftest.py         a tiny transport task, hand-checkable behaviour strings
-tests/test_parsers.py     the (:resource ...) / (:function ...) file parsers
-tests/test_dimensions.py  each dimension: tokens, domains, estimates, distances
-tests/test_counter.py     bdc / extract / b_maxsum, and edge cases
+tests/test_parsers.py     the (:resource ...) / (:function ...) declaration parser
+tests/test_dimensions.py  each dimension: tokens and distances
+tests/test_counter.py     b_coverage / extract / b_maxsum, and edge cases
 ```
 
 The expected strings are worked out by hand from the fixture task rather than recorded from

@@ -5,8 +5,6 @@ enabled dimensions are joined with ' $$ ' by BehaviourDiversityCounter, and the
 distance() implementations parse their own token back out of that joined string.
 """
 
-import math
-
 import pytest
 from unified_planning.shortcuts import SequentialSimulator
 
@@ -42,13 +40,33 @@ def simulate(task, plan):
 
 
 class TestBase:
-    def test_subclasses_must_implement_estimate_domain(self, task):
-        with pytest.raises(AssertionError, match='implemented by the child class'):
-            BehaviourDimension(task, 'x', None)._estimate_domain()
-
     def test_subclasses_must_implement_distance(self, task):
         with pytest.raises(AssertionError, match='implemented by the child class'):
             BehaviourDimension(task, 'x', None).distance('a', 'b')
+
+
+class TestWeights:
+    def test_a_dimension_scales_its_own_distance_by_its_weight(
+        self, task, plan_l1_then_l2, plan_l2_then_l1
+    ):
+        """Weight 1.0 by default, so an undeclared dimension scores unscaled."""
+        plain = GoalPredicatesOrderingDimension(task)
+        weighted = GoalPredicatesOrderingDimension(task, {'weight': 0.25})
+        first = plain.plan_behaviour(simulate(task, plan_l1_then_l2))
+        second = plain.plan_behaviour(simulate(task, plan_l2_then_l1))
+
+        assert plain.weight == 1.0
+        assert plain.distance(first, second) == 1.0
+        assert weighted.distance(first, second) == pytest.approx(0.25)
+
+    def test_a_path_shaped_addinfo_can_still_declare_one(self, task, resource_file):
+        """`ru` takes a file path, so its weight is declared alongside it."""
+        plain = ResourceUsedDimension(task, resource_file)
+        declared = ResourceUsedDimension(task, {'file': resource_file, 'weight': 0.3})
+
+        assert plain.weight == 1.0
+        assert declared.weight == 0.3
+        assert declared.addinfo['objects'] == plain.addinfo['objects']
 
 
 class TestGoalPredicatesOrdering:
@@ -76,26 +94,6 @@ class TestGoalPredicatesOrdering:
         assert dimension.plan_behaviour(simulate(task, plan_l1_then_l2)) == (
             dimension.plan_behaviour(simulate(task, plan_two_trucks))
         )
-
-    def test_observed_behaviours_accumulate_in_domain(
-        self, task, plan_l1_then_l2, plan_l2_then_l1
-    ):
-        dimension = GoalPredicatesOrderingDimension(task)
-
-        dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
-        dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
-
-        assert dimension.domain == {
-            'delivered(l1)->delivered(l2)',
-            'delivered(l2)->delivered(l1)',
-        }
-
-    def test_estimated_domain_is_the_permutations_of_the_goals(self, task):
-        dimension = GoalPredicatesOrderingDimension(task)
-
-        dimension._estimate_domain()
-
-        assert dimension.estimated_domain_size == math.factorial(2) == 2
 
     def test_distance_is_zero_for_identical_orderings(self, task, plan_l1_then_l2):
         dimension = GoalPredicatesOrderingDimension(task)
@@ -141,41 +139,6 @@ class TestMakespanOptimalCost:
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
         assert dimension.plan_behaviour(plan_l1_then_l2) == 'cb:4'
-
-    def test_plan_lengths_accumulate_in_domain(
-        self, task, plan_l1_then_l2, inapplicable_plan
-    ):
-        dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
-
-        dimension.plan_behaviour(plan_l1_then_l2)
-        dimension.plan_behaviour(inapplicable_plan)
-
-        assert dimension.domain == {4, 1}
-
-    def test_estimate_requires_a_q_value(self, task):
-        dimension = MakespanOptimalCostDimension(task, {})
-
-        with pytest.raises(AssertionError, match='q value should be provided'):
-            dimension._estimate_domain()
-
-    def test_optimal_only_bound_admits_a_single_cost(self, task, plan_l1_then_l2):
-        dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
-        dimension.plan_behaviour(plan_l1_then_l2)
-
-        dimension._estimate_domain()
-
-        assert dimension.estimated_domain_size == 1
-
-    def test_relaxed_bound_admits_costs_up_to_q_times_optimal(
-        self, task, plan_l1_then_l2
-    ):
-        dimension = MakespanOptimalCostDimension(task, {'q': 1.5})
-        dimension.plan_behaviour(plan_l1_then_l2)  # optimal cost observed = 4
-
-        dimension._estimate_domain()
-
-        # costs 4, 5, 6 -- inclusive of int(4 * 1.5)
-        assert dimension.estimated_domain_size == 3
 
     def test_distance_accepts_behaviour_strings_like_the_other_dimensions(self, task):
         """Regression: distance() read .actions off its arguments, so it only worked
@@ -248,16 +211,6 @@ class TestResourceUsed:
         assert dimension.plan_behaviour(simulate(task, plan_l1_then_l2)) == (
             dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
         )
-
-    def test_estimated_domain_is_the_non_empty_subsets_of_resources(
-        self, task, resource_file
-    ):
-        dimension = ResourceUsedDimension(task, resource_file)
-
-        dimension._estimate_domain()
-
-        # 2 resources -> 2**2 - 1 non-empty subsets
-        assert dimension.estimated_domain_size == 3
 
     def test_distance_is_zero_for_the_same_resource_set(
         self, task, resource_file, plan_l1_then_l2
@@ -337,19 +290,10 @@ class TestResourceCount:
 
         assert first != second
 
-    def test_estimated_domain_is_the_non_empty_subsets_of_resources(
-        self, task, resource_file
-    ):
-        dimension = ResourceCountDimension(task, resource_file)
-
-        dimension._estimate_domain()
-
-        assert dimension.estimated_domain_size == 3
-
     def test_distance_is_not_implemented(self, task, resource_file):
         dimension = ResourceCountDimension(task, resource_file)
 
-        with pytest.raises(AssertionError, match='not implemented'):
+        with pytest.raises(AssertionError, match='implemented by the child class'):
             dimension.distance('rc:tr1=4', 'rc:tr1=0')
 
     def test_behaviour_is_a_single_separator_free_token(
@@ -416,16 +360,6 @@ class TestUtilityValue:
 
         assert behaviour == 'utility_value:7 -- at(tr1, l0)=7'
 
-    def test_estimated_domain_counts_distinct_achievable_sums(
-        self, task, utility_goals
-    ):
-        dimension = UtilityValueDimension(task, utility_goals)
-
-        dimension._estimate_domain()
-
-        # non-empty subsets of {5, 3} produce sums 5, 3, 8
-        assert dimension.estimated_domain_size == 3
-
     def test_distance_is_not_implemented(self, task, utility_goals):
         dimension = UtilityValueDimension(task, utility_goals)
 
@@ -434,37 +368,19 @@ class TestUtilityValue:
 
 
 class TestFunctions:
-    def test_estimate_uses_the_declared_range(self, task, function_file):
-        dimension = NumericFunctionDimension(task, function_file)
-
-        dimension._estimate_domain()
-
-        # range(0, 90, 10) -> 9 bins
-        assert dimension.estimated_domain_size == 9
-
     def test_behaviour_is_the_index_of_the_final_value_bin(
         self, task, function_file, plan_l1_then_l2
     ):
-        """Regression: min/max were swapped at parse time, which made the bin list
-        empty and raised IndexError before any value could be binned."""
+        """Two regressions: min/max were swapped at parse time, which made the bin
+        list empty and raised IndexError before any value could be binned; and
+        plan_behaviour returned ','.join(val) over an already-joined string, so
+        'fuel:8' came back as 'f,u,e,l,:,8'."""
         dimension = NumericFunctionDimension(task, function_file)
 
         behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
 
         # 100 fuel - 2 moves * 10 = 80 -> bin index 8
         assert behaviour == 'fuel:8'
-
-    def test_behaviour_matches_the_value_recorded_in_domain(
-        self, task, function_file, plan_l1_then_l2
-    ):
-        """Regression: plan_behaviour returned ','.join(val) over an already-joined
-        string, so 'fuel:8' came back as 'f,u,e,l,:,8' while domain kept 'fuel:8'."""
-        dimension = NumericFunctionDimension(task, function_file)
-
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
-
-        assert dimension.domain == {'fuel:8'}
-        assert behaviour in dimension.domain
 
     def test_fuel_spent_changes_the_bin(self, task, domain, function_file, make_plan):
         move = domain['move']
@@ -486,5 +402,5 @@ class TestFunctions:
         """End to end: the fn dimension was unusable as shipped."""
         counter = BehaviourDiversityCounter(task, [('fn', function_file)])
 
-        assert counter.bdc([plan_l1_then_l2]) == 1
+        assert counter.b_coverage([plan_l1_then_l2]) == 1
         assert counter.behaviours([plan_l1_then_l2]) == {'fuel:8'}
