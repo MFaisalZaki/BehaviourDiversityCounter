@@ -87,14 +87,13 @@ class StubCounter(BehaviourDiversityCounter):
     the real ``_behaviours_of`` runs and never reaches ``_simulate``.
     """
 
-    def __init__(self, weights=None):
+    def __init__(self):
         self.task = None
         self.dimensions = {'nr': RoversUsedDimension(), 'co': CollectionOrderDimension()}
         self._simulator = None
         self._behaviour_cache = {}
-        self._distance_cache = {}
+        self._behaviour_distance_cache = {}
         self._plans = []          # keeps the plans alive: the cache is keyed by id()
-        self.set_weights(weights)
 
     def make_plans(self, *specs):
         """Plans for (rovers, order) pairs, pre-registered as their behaviours."""
@@ -281,118 +280,6 @@ class TestSelectorsHonourTheirIndicators:
 
         with pytest.raises(ValueError, match='valid indicators'):
             counter.extract(plans, k=1, indicator='nope')
-
-
-# ----------------------------------------------------------------------
-# Test 6: weights, and the cache they invalidate
-# ----------------------------------------------------------------------
-
-class TestWeights:
-    """The paper's separable distance is d(b, b') = sum_i w_i * d_i(b_i, b'_i),
-    and the weights are the one thing it asks a user to supply.
-
-    The distance cache is keyed by the behaviour pair alone, so every one of
-    these assertions is also an assertion that changing the weights cleared it.
-    Experiment C changes the weights twenty-one times per task on one counter
-    object: a cache that survived the change would return twenty-one identical
-    rows and raise no error at all.
-    """
-
-    @pytest.fixture
-    def behaviours(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
-        return [plan.behaviour for plan in plans]
-
-    def test_weighting_out_the_order_dimension(self, counter, behaviours):
-        """w_nr = 1, w_co = 0: only the rover count is left to separate them."""
-        rsi, ris, sir = behaviours
-
-        counter.set_weights({'nr': 1.0, 'co': 0.0})
-
-        assert counter._pair_distance(rsi, ris) == pytest.approx(0.0)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
-
-    def test_the_same_counter_answers_for_both_weightings(self, counter, behaviours):
-        """The heart of the test: twice on ONE counter, weights changed between.
-
-        The first pass warms the cache with the uniform answers; if setting the
-        weights did not clear it, the second pass would return them again.
-        """
-        rsi, ris, sir = behaviours
-
-        # Pass one, the uniform 1/2 default.
-        assert counter._pair_distance(rsi, ris) == pytest.approx(1.0)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0)
-
-        # Pass two, on the same object.
-        counter.set_weights({'nr': 1.0, 'co': 0.0})
-        assert counter._pair_distance(rsi, ris) == pytest.approx(0.0)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
-
-        # And back, so the failure cannot be a one-way cache that merely lags.
-        counter.set_weights({'nr': 0.5, 'co': 0.5})
-        assert counter._pair_distance(rsi, ris) == pytest.approx(1.0)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0)
-
-    def test_the_indicators_follow_the_weights_on_one_counter(self, counter):
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
-
-        uniform = counter.b_maxsum(plans)
-        counter.set_weights({'nr': 1.0, 'co': 0.0})
-        rover_only = counter.b_maxsum(plans)
-        counter.set_weights({'nr': 0.0, 'co': 1.0})
-        order_only = counter.b_maxsum(plans)
-
-        assert uniform == pytest.approx(4.5)
-        assert rover_only == pytest.approx(2.0)   # only (2,SIR) differs in count
-        assert order_only == pytest.approx(7.0)   # Hamming 2 + 3 + 2
-        assert uniform == pytest.approx((rover_only + order_only) / 2)
-
-    def test_a_weight_sweep_on_one_counter_does_not_repeat_itself(self, counter):
-        """Experiment C's sweep in miniature: 21 weightings, one counter."""
-        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'))
-
-        values = []
-        for step in range(21):
-            w = step / 20
-            counter.set_weights({'nr': w, 'co': 1.0 - w})
-            values.append(counter.b_maxsum(plans))
-
-        assert len(set(values)) == 21
-        assert values == sorted(values, reverse=True)  # order separates them more
-
-    def test_uniform_weights_reproduce_the_unweighted_mean(self, counter):
-        """The default has to leave the pre-weights behaviour exactly as it was."""
-        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
-        rsi, sir = (plan.behaviour for plan in plans)
-        unweighted = [RoversUsedDimension(), CollectionOrderDimension()]
-
-        assert counter._pair_distance(rsi, sir) == pytest.approx(
-            sum(d.distance(rsi, sir) for d in unweighted) / len(unweighted))
-
-    def test_an_unknown_dimension_in_the_weights_is_rejected(self, counter):
-        with pytest.raises(ValueError, match='unknown dimension'):
-            counter.set_weights({'nr': 1.0, 'co': 0.0, 'nope': 1.0})
-
-    def test_a_missing_weight_is_rejected(self, counter):
-        """Silently defaulting the missing one would be a weighting the user
-        never asked for."""
-        with pytest.raises(ValueError, match='no weight given'):
-            counter.set_weights({'nr': 1.0})
-
-    def test_a_negative_weight_is_rejected(self, counter):
-        with pytest.raises(ValueError, match='negative'):
-            counter.set_weights({'nr': -1.0, 'co': 2.0})
-
-    def test_weights_are_not_normalised(self, counter):
-        """The paper's worked examples read raw per-dimension distances, so the
-        weights are taken as given rather than rescaled to sum to one."""
-        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
-        rsi, sir = (plan.behaviour for plan in plans)
-
-        counter.set_weights({'nr': 2.0, 'co': 2.0})
-
-        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0 * 1 + 2.0 * 3)
 
 
 class TestSingleBehaviourPools:

@@ -58,7 +58,7 @@ class InapplicablePlanError(ValueError):
     """
 
 class BehaviourDiversityCounter:
-    def __init__(self, task, dimensions, weights=None):
+    def __init__(self, task, dimensions):
         assert not any(map(lambda e: not e[0] in dimensions_map.keys(), dimensions)), f"unknown dimension(s) {[e[0] for e in dimensions if not e[0] in dimensions_map.keys()]}; valid keys: {sorted(dimensions_map)}"
         self.task = task
         self.dimensions = {name: dimensions_map[name](task, addinfo) for name, addinfo in dimensions}

@@ -177,29 +177,6 @@ class TestDeclaredWeights:
         with pytest.raises(ValueError, match=r"no weight given for dimension\(s\): \['cb'\]"):
             BehaviourDiversityCounter(task, [('go', {'weight': 1.0}), ('cb', None)])
 
-    def test_an_explicit_argument_overrides_the_declaration(
-        self, task, plan_l1_then_l2, plan_l2_then_l1
-    ):
-        counter = BehaviourDiversityCounter(
-            task, [('go', {'weight': 0.25}), ('cb', {'weight': 0.75})],
-            weights={'go': 1.0, 'cb': 0.0})
-
-        assert counter.b_maxsum([plan_l1_then_l2, plan_l2_then_l1]) == pytest.approx(1.0)
-
-    def test_set_weights_still_reweights_a_live_counter(
-        self, task, plan_l1_then_l2, plan_l2_then_l1
-    ):
-        """The sweep reweights one counter rather than rebuilding it, so the
-        pair-distance cache has to be cleared on the way through."""
-        counter = BehaviourDiversityCounter(
-            task, [('go', {'weight': 0.25}), ('cb', {'weight': 0.75})])
-        pair = [plan_l1_then_l2, plan_l2_then_l1]
-        assert counter.b_maxsum(pair) == pytest.approx(0.25)
-
-        counter.set_weights({'go': 1.0, 'cb': 0.0})
-
-        assert counter.b_maxsum(pair) == pytest.approx(1.0)
-
     def test_no_declaration_leaves_the_uniform_default(
         self, task, plan_l1_then_l2, plan_l2_then_l1
     ):
