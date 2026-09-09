@@ -64,13 +64,20 @@ counts it as a failure; nothing is fabricated for it.
 
 | | pools | selection k | model |
 |---|---|---|---|
-| E0 case study | rovers, q = 2.0 | 3 | rovers used (discrete) + subgoal ordering, 1/2 each |
+| E0 case study | rovers, q = 2.0, whole pool | 3 | rovers used (discrete) + subgoal ordering, 1/2 each |
 | E1 metric vs feature | all FI pools | 5, 10, 100 | ordering + cost bin (+ agents used) |
 | E2 cross-evaluation | all FI pools | 5, 10, 100 | same |
 | E3 greedy vs optimal | pools with 8 to 20 behaviours | 3, 4, 5 | same |
 | E4 generators | every generator's pools, cut to a shared size | 5, 10, 100 | same |
 | E5 selection cost | the 20 largest pools | 5, 10, 100, 1000 | same |
 | E6 sensitivity | FI pools, q = 2.0 | 10 | ordering + cost bin |
+
+For a selection of k, E1, E2, E3 and E6 select from the first
+N_max = min(10 · k, 1000) plans of the pool in generation order (`grid.pool-cap-factor`,
+`grid.pool-cap`), as the brief's grid says; E4 cuts every generator's pool to
+a shared size under the same cap, E5 has its own sizes, and E0 uses the whole
+pool, since the brief picks the instance by the pool's behaviours. Every row
+records the `pool_size` it was selected from.
 
 The agents-used feature is the `ru` dimension read from `data/ru-info-dir`,
 which declares the agent type per domain (rovers in rovers, trucks and
@@ -89,9 +96,10 @@ are filtered out and listed.
   `{q}-{k}-{track}-{year}-{domain}-{inst}-{generator}-results.json` from the
   plans directory, so pregenerated pools at q = 2.0, or from `topk` / `topq`,
   are added by dropping them there under that naming. The pools shipped in
-  `data/` are forbid-iterative at q = 1.0 (k in 5, 10, 100, 1000); until
-  q = 2.0 pools are present, E0 and E6 list no tasks, the cost-bin feature is
-  constant, and E4 reports one generator, all of which the manifests say.
+  `data/` are forbid-iterative pools of up to 1000 plans at q = 1.0 and
+  q = 2.0 (file name k = 1000); the per-k candidate pools above are prefixes
+  of them. E4 reports one generator until `topk` / `topq` pools are added,
+  which the manifests say.
 - **Validation** is by replay against the task in unified-planning rather
   than by VAL; a plan that cannot be replayed is dropped and listed in the
   pool record.

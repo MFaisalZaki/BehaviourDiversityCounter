@@ -8,7 +8,8 @@ overlap with the default setting's selection.
 import json
 import os
 
-from harness import INDICATORS, SCORE_OF, behaviour_set, flatten, jaccard, load_pool, scores, select_all
+from harness import (INDICATORS, SCORE_OF, behaviour_set, candidates, flatten, jaccard, load_pool, scores,
+                     select_all)
 from model import build, default_dimensions, with_weights
 from report import group_by, latex_table, write_csv, write_manifest
 
@@ -31,18 +32,20 @@ def run_task(taskdetails, params):
     pool = load_pool(taskdetails)
     out = {'pool': pool.record(), 'rows': [], 'extra': {}}
     k = params['k']
-    if len(pool.plans) < k:
-        out['extra']['skipped'] = f'pool of {len(pool.plans)} plans is smaller than k = {k}'
+    plans = candidates(pool, params, k)              # N_max = min(10 k, 1000) plans
+    out['extra']['pool_size'] = len(plans)
+    if len(plans) < k:
+        out['extra']['skipped'] = f'pool of {len(plans)} plans is smaller than k = {k}'
         return out
     default_counter, out['model'] = build(pool, default_dimensions(pool, params, with_resources=False))
-    default_counter.behaviours(pool.plans)
+    default_counter.behaviours(plans)
     default_selection = {}
     for parameter, value, setting in settings(params):
         dimensions = with_weights(default_dimensions(pool, params, bin_width=setting['bin_width'], with_resources=False),
                                   [setting['weight'], 1 - setting['weight']])
         counter, _ = build(pool, dimensions)
-        counter.behaviours(pool.plans)
-        selected, timing = select_all(counter, pool.plans, k, setting['k_nn'])
+        counter.behaviours(plans)
+        selected, timing = select_all(counter, plans, k, setting['k_nn'])
         for indicator in INDICATORS:
             plans = selected[indicator]
             own = scores(counter, plans, setting['k_nn'])
@@ -54,7 +57,7 @@ def run_task(taskdetails, params):
                 default_selection[indicator] = (under_default, plan_ids)
             reference = default_selection[indicator]
             out['rows'].append({
-                'parameter': parameter, 'value': value, 'selector': indicator, 'k': k,
+                'parameter': parameter, 'value': value, 'selector': indicator, 'k': k, 'pool_size': len(plans),
                 'score': own[SCORE_OF[indicator]], **own,
                 'jaccard_to_default': jaccard(under_default, reference[0]),
                 'jaccard_plans_to_default': jaccard(plan_ids, reference[1]),

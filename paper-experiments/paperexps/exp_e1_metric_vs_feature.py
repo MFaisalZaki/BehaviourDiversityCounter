@@ -8,7 +8,9 @@ measures, plus the fraction of distinct behaviours and the mean cost ratio.
 import os
 
 from baseline import METRICS, PlanMetric, greedy_select, plan_set_score
-from harness import (INDICATORS, Timer, coverage_rows, flatten, load_pool, mean_cost_ratio,
+import numpy as np
+
+from harness import (INDICATORS, Timer, candidates, coverage_rows, flatten, load_pool, mean_cost_ratio,
                      scores, select_all, selection_k_values)
 from model import build, default_dimensions
 from report import (group_by, latex_table, matplotlib_or_none, matrix_table, paired_wilcoxon_rows,
@@ -36,19 +38,25 @@ def run_task(taskdetails, params):
     out['plan_metric_matrices'] = {'cpu_s': timer.cpu, 'wall_s': timer.wall}
 
     for k in selection_k_values(params, len(pool.plans)):
+        # The candidate pool is capped at N_max = min(10 k, 1000) plans, in
+        # generation order; the plan-level matrices are sliced to it.
+        pool_k = candidates(pool, params, k)
+        if len(pool_k) < k:
+            continue
+        within = np.array([pool.index[id(plan)] for plan in pool_k])
         selected, timing = {}, {}
         for name in METRICS:
             with Timer() as timer:
-                indices = greedy_select(matrices[name], k)
-            selected[name] = [pool.plans[i] for i in indices]
+                positions = greedy_select(matrices[name][np.ix_(within, within)], k)
+            selected[name] = [pool_k[i] for i in positions]
             timing[name] = {'cpu_s': timer.cpu, 'wall_s': timer.wall}
-        bspace, bspace_timing = select_all(counter, pool.plans, k, k_nn)
+        bspace, bspace_timing = select_all(counter, pool_k, k, k_nn)
         selected.update(bspace)
         timing.update(bspace_timing)
         for selector in SELECTORS:
             plans = selected[selector]
             indices = [pool.index[id(plan)] for plan in plans]
-            row = {'k': k, 'selector': selector, 'n_selected': len(plans)}
+            row = {'k': k, 'selector': selector, 'n_selected': len(plans), 'pool_size': len(pool_k)}
             for name in METRICS:
                 row[f'score_{name}'] = plan_set_score(matrices[name], indices)
             row.update(scores(counter, plans, k_nn))

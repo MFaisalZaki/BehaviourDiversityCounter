@@ -342,7 +342,7 @@ build_experiment() {
             say "unpacking the FI plan pools"
             command -v unzip >/dev/null 2>&1 || die "unzip is needed to unpack ${ZIP_FILE}"
             mkdir -p "$(dirname "$plans_dir")"
-            unzip -q "$ZIP_FILE" -d "$(dirname "$plans_dir")"
+            unzip -q "$ZIP_FILE" -x "__MACOSX/*" -d "$(dirname "$plans_dir")"
         fi
         if [ ! -d "$ru_info_dir" ] || [ -z "$(ls -A "$ru_info_dir" 2>/dev/null)" ]; then
             [ -d "$RU_INFO_SOURCE" ] || die "no ru-info to copy from ${RU_INFO_SOURCE}"

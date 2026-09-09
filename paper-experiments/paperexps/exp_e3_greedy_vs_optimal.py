@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-from harness import INDICATORS, SCORE_OF, Timer, flatten, load_pool, representatives, scores
+from harness import INDICATORS, SCORE_OF, Timer, candidates, flatten, load_pool, representatives, scores
 from model import build, default_dimensions
 from report import group_by, latex_table, matplotlib_or_none, save_figure, summary, write_csv, write_manifest
 
@@ -40,26 +40,30 @@ def run_task(taskdetails, params):
         return out
     counter, out['model'] = build(pool, default_dimensions(pool, params))
     counter.behaviours(pool.plans)
-    reps = representatives(counter, pool.plans)
-    b = len(reps)
     low, high = params['b-range']
-    out['extra']['b'] = b
-    if not low <= b <= high:
-        out['extra']['skipped'] = f'b = {b} outside [{low}, {high}]'
-        return out
     k_nn = params['k-nn']
-    distinct = list(reps)
-    distance = counter._behaviour_distance_matrix(distinct)
-    at_most_k_maxmin = float(distance.max())
-    for k in [k for k in params['k-values'] if k <= b]:
+    out['extra']['b'] = {}
+    for k in params['k-values']:
+        # The candidate pool is capped at N_max = min(10 k, 1000) plans, and
+        # b is the number of distinct behaviours *it* exhibits.
+        pool_k = candidates(pool, params, k)
+        reps = representatives(counter, pool_k)
+        b = len(reps)
+        out['extra']['b'][k] = b
+        if not low <= b <= high or k > b:
+            out['extra'].setdefault('skipped', {})[k] = f'b = {b} outside [{low}, {high}]'
+            continue
+        distinct = list(reps)
+        distance = counter._behaviour_distance_matrix(distinct)
+        at_most_k_maxmin = float(distance.max())
         with Timer() as timer:
             best, n_subsets = optima(distance, k, k_nn)
         for indicator in INDICATORS:
-            selected = counter.extract(pool.plans, k, indicator=indicator, k_nn=k_nn)
+            selected = counter.extract(pool_k, k, indicator=indicator, k_nn=k_nn)
             greedy = scores(counter, selected, k_nn)[SCORE_OF[indicator]]
             optimal = best[indicator]
             ratio = greedy / optimal if optimal > 0 else (1.0 if greedy == optimal else None)
-            row = {'k': k, 'indicator': indicator, 'b': b, 'greedy_value': greedy,
+            row = {'k': k, 'indicator': indicator, 'b': b, 'pool_size': len(pool_k), 'greedy_value': greedy,
                    'optimal_value_exact_k': optimal, 'ratio_exact_k': ratio,
                    'optimal_value_at_most_k': at_most_k_maxmin if indicator == 'bmaxmin' else None,
                    'n_subsets': n_subsets, 'enumeration_cpu_s': timer.cpu,
@@ -89,7 +93,7 @@ def report(results, params, paths, config_file, started):
                                'tab:e3-ratios'))
     checks = {
         'pools_in_range': len({r['task_id'] for r in rows}),
-        'pools_skipped': sum(1 for r in results if (r.get('extra') or {}).get('skipped')),
+        'pools_skipped': sum(1 for r in results if (r.get('extra') or {}).get('skipped') and not r.get('rows')),
         'bcoverage_ratios_all_one': all(abs(r['ratio_exact_k'] - 1.0) < 1e-9 for r in rows if r['indicator'] == 'bcoverage'),
         'below_half': [{'task_id': r['task_id'], 'k': r['k'], 'indicator': r['indicator'], 'ratio': r['ratio_exact_k']}
                        for r in rows if r.get('below_half')],

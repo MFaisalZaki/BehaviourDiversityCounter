@@ -23,10 +23,12 @@ def rovers_task():
     tasks = match_plans_with_problems(os.path.join(SANDBOX, 'fi-generated-plans-dir'),
                                       os.path.join(SANDBOX, 'classical-domains'),
                                       os.path.join(SANDBOX, 'ru-info-dir'))
-    candidates = [t for t in tasks if t['domain'] == 'rovers' and t['k'] == 10
-                  and os.path.getsize(t['pool_file']) > 48]
-    assert candidates, 'no Rovers pool with k = 10 in the sandbox'
-    return candidates[0]
+    from utils import pool_plan_count
+    candidates = [t for t in tasks if t['domain'] == 'rovers' and os.path.getsize(t['pool_file']) > 48
+                  and pool_plan_count(t['pool_file']) > 0]
+    assert candidates, 'no non-empty Rovers pool in the sandbox'
+    # The smallest pool that holds plans keeps the smoke test quick.
+    return min(candidates, key=lambda t: os.path.getsize(t['pool_file']))
 
 
 @pytest.fixture(scope='module')

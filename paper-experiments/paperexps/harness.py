@@ -161,6 +161,17 @@ def selection_k_values(params, size):
     return [k for k in params['k-values'] if k <= size]
 
 
+def candidate_cap(params, k):
+    """The brief's pool cap N_max = min(factor * k, cap) for a selection of k."""
+    return min(int(params.get('pool-cap-factor', 10)) * k, int(params.get('pool-cap', 1000)))
+
+
+def candidates(pool, params, k):
+    """The candidate pool for a selection of k: the first N_max plans in
+    generation order, still sorted by cost."""
+    return pool.prefix(candidate_cap(params, k))
+
+
 def plan_record(plan):
     return {'cost': str(plan.cost), 'behaviour': plan.behaviour, 'pool_index': plan.pool_index,
             'plan': plan.plan_str}

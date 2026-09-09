@@ -10,8 +10,8 @@ import math
 import os
 import random
 
-from harness import (INDICATORS, Timer, flatten, load_pool, representatives, scores, select_all,
-                     selection_k_values)
+from harness import (INDICATORS, Timer, candidates, flatten, load_pool, representatives, scores,
+                     select_all, selection_k_values)
 from model import build, default_dimensions
 from report import group_by, latex_table, matrix_table, relative_score_matrix, write_csv, write_manifest
 from stats import kendall_tau, median
@@ -45,14 +45,18 @@ def run_task(taskdetails, params):
         counter.behaviours(pool.plans)
     out['mapping'] = {'cpu_s': mapping.cpu, 'wall_s': mapping.wall}
     k_nn = params['k-nn']
-    reps = representatives(counter, pool.plans)
-    behaviours = sorted(reps)
     rng = random.Random(f"{params['seed']}:{taskdetails['task_id']}")
 
     for k in selection_k_values(params, len(pool.plans)):
-        selected, timing = select_all(counter, pool.plans, k, k_nn)
+        pool_k = candidates(pool, params, k)         # N_max = min(10 k, 1000) plans
+        if len(pool_k) < k:
+            continue
+        reps = representatives(counter, pool_k)
+        behaviours = sorted(reps)
+        selected, timing = select_all(counter, pool_k, k, k_nn)
         for indicator in INDICATORS:
-            out['rows'].append({'k': k, 'selector': indicator, **scores(counter, selected[indicator], k_nn),
+            out['rows'].append({'k': k, 'selector': indicator, 'pool_size': len(pool_k), 'b': len(behaviours),
+                                **scores(counter, selected[indicator], k_nn),
                                 'selection_cpu_s': timing[indicator]['cpu_s']})
         subsets = random_subsets(behaviours, min(k, len(behaviours)), params['random-subsets'], rng)
         scored = [scores(counter, [reps[b] for b in subset], k_nn) for subset in subsets]
