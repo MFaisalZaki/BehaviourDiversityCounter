@@ -12,8 +12,13 @@ the assertion. The two dimensions are the paper's own:
     dimension 1 ('nr')  the number of rovers used; distance 0 if the values are
                         equal and 1 otherwise; weight 1/2
     dimension 2 ('co')  the sample collection order, a three-letter string;
-                        distance is raw Hamming over the three positions;
+                        distance is the Hamming distance over the three
+                        positions divided by three, so that it lies in [0, 1]
+                        like every per-dimension distance of Def. feature;
                         weight 1/2
+
+The weights are not written into the stub: with none declared the counter's
+own convention gives the uniform 1/n, which is the paper's 1/2, 1/2.
 """
 
 import itertools
@@ -49,11 +54,8 @@ class RoversUsedDimension(BehaviourDimension):
 
 
 class CollectionOrderDimension(BehaviourDimension):
-    """Raw Hamming distance over the three collection-order positions.
-
-    Raw, not normalised into [0, 1]: the paper's worked examples add a Hamming
-    count of 2 or 3 straight into the weighted sum, so dividing by the string
-    length here would quietly move every golden number.
+    """Hamming distance over the three collection-order positions, divided by
+    three -- the number of samples -- so that it takes the values 0, 2/3 and 1.
     """
 
     def __init__(self):
@@ -61,20 +63,15 @@ class CollectionOrderDimension(BehaviourDimension):
 
     def distance(self, b1, b2):
         s1, s2 = token(b1, self.name), token(b2, self.name)
-        return self.weight * float(sum(x != y for x, y in zip(s1, s2)))
+        return self.weight * sum(x != y for x, y in zip(s1, s2)) / len(s1)
 
 
 class StubPlan:
     """A plan that is nothing but its behaviour."""
 
-    def __init__(self, rovers, order, actions=None):
+    def __init__(self, rovers, order, cost=1):
         self.behaviour = f'nr:{rovers} $$ co:{order}'
-        # The plan-level baseline reads actions, not behaviours. Derived from
-        # the behaviour so that distinct behaviours differ at the plan level
-        # too, and repeated so the multiset reading has something to see.
-        self.actions = actions if actions is not None else (
-            [f'collect_{letter}' for letter in order] +
-            [f'drive_rover{i}' for i in range(1, rovers + 1)] * 2)
+        self.cost = cost
 
     def __repr__(self):
         return f'StubPlan({self.behaviour!r})'
@@ -90,17 +87,21 @@ class StubCounter(BehaviourDiversityCounter):
     def __init__(self):
         self.task = None
         self.dimensions = {'nr': RoversUsedDimension(), 'co': CollectionOrderDimension()}
+        self._apply_weight_convention()      # the real rule: uniform 1/2, 1/2
         self._simulator = None
         self._behaviour_cache = {}
+        self._cost_cache = {}
         self._behaviour_distance_cache = {}
         self._plans = []          # keeps the plans alive: the cache is keyed by id()
 
     def make_plans(self, *specs):
-        """Plans for (rovers, order) pairs, pre-registered as their behaviours."""
+        """Plans for (rovers, order[, cost]) tuples, pre-registered as their
+        behaviours and costs."""
         plans = []
-        for rovers, order in specs:
-            plan = StubPlan(rovers, order)
+        for spec in specs:
+            plan = StubPlan(*spec)
             self._behaviour_cache[id(plan)] = plan.behaviour
+            self._cost_cache[id(plan)] = plan.cost
             self._plans.append(plan)
             plans.append(plan)
         return plans
@@ -158,7 +159,7 @@ class TestWorkedExampleOne:
 # ----------------------------------------------------------------------
 
 class TestWorkedExampleTwo:
-    """Behaviours (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), pairwise 1, 2 and 1.5."""
+    """Behaviours (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), pairwise 1/3, 1 and 5/6."""
 
     @pytest.fixture
     def plans(self, counter):
@@ -167,18 +168,116 @@ class TestWorkedExampleTwo:
     def test_the_three_pairwise_distances(self, counter, plans):
         rsi, ris, sir = (plan.behaviour for plan in plans)
 
-        assert counter._pair_distance(rsi, ris) == pytest.approx(1.0)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(2.0)
-        assert counter._pair_distance(ris, sir) == pytest.approx(1.5)
+        assert counter._pair_distance(rsi, ris) == pytest.approx(1 / 3)
+        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
+        assert counter._pair_distance(ris, sir) == pytest.approx(5 / 6)
 
     def test_b_maxsum(self, counter, plans):
-        assert counter.b_maxsum(plans) == pytest.approx(4.5)
+        assert counter.b_maxsum(plans) == pytest.approx(13 / 6)
 
     def test_b_maxmin(self, counter, plans):
-        assert counter.b_maxmin(plans) == pytest.approx(1.0)
+        assert counter.b_maxmin(plans) == pytest.approx(1 / 3)
 
     def test_b_novelty(self, counter, plans):
-        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(3.5 / 3)
+        """Nearest-neighbour distances 1/3, 1/3 and 5/6, averaging to 1/2."""
+        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(1 / 2)
+
+
+# ----------------------------------------------------------------------
+# The brief's oracle table (EXPERIMENTS_BRIEF.md, section 3)
+# ----------------------------------------------------------------------
+
+class TestOracleTable:
+    """Every row of the brief's table, with exact fractions."""
+
+    def test_third_set(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'RSI'))
+        rsi1, ris1, rsi2 = (plan.behaviour for plan in plans)
+
+        assert counter._pair_distance(rsi1, rsi2) == pytest.approx(1 / 2)
+        assert counter._pair_distance(ris1, rsi2) == pytest.approx(5 / 6)
+        assert counter.b_coverage(plans) == 3
+        assert counter.b_maxsum(plans) == pytest.approx(5 / 3)
+        assert counter.b_maxmin(plans) == pytest.approx(1 / 3)
+        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(7 / 18)
+        assert counter.b_novelty(plans, k_nn=2) == pytest.approx(5 / 9)
+
+    def test_pair(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
+
+        assert counter.b_coverage(plans) == 2
+        assert counter.b_maxsum(plans) == pytest.approx(1.0)
+        assert counter.b_maxmin(plans) == pytest.approx(1.0)
+        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(1.0)
+
+    def test_single_behaviour(self, counter):
+        plans = counter.make_plans((1, 'RSI'))
+
+        assert (counter.b_coverage(plans), counter.b_maxsum(plans), counter.b_maxmin(plans),
+                counter.b_novelty(plans, k_nn=1)) == (1, 0, 0, 0)
+
+    def test_second_set_with_a_larger_neighbourhood(self, counter):
+        """kappa' clamps to 2; per-behaviour means 2/3, 7/12 and 11/12."""
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
+
+        assert counter.b_novelty(plans, k_nn=2) == pytest.approx(13 / 18)
+        assert counter.b_novelty(plans, k_nn=3) == pytest.approx(13 / 18)
+
+    def test_first_set_under_every_kappa(self, counter):
+        plans = counter.make_plans((2, 'RIS'), (1, 'RIS'), (1, 'RIS'))
+
+        for k_nn in (1, 2, 3, 15):
+            assert counter.b_novelty(plans, k_nn=k_nn) == pytest.approx(1 / 2)
+
+    def test_b_maxsum_is_not_submodular(self, counter):
+        """The gain of <1,RIS> on {<1,RSI>, <2,SIR>} is 7/6; on the empty set 0."""
+        rsi, sir, ris = counter.make_plans((1, 'RSI'), (2, 'SIR'), (1, 'RIS'))
+
+        gain_large = counter.b_maxsum([rsi, sir, ris]) - counter.b_maxsum([rsi, sir])
+        gain_small = counter.b_maxsum([ris]) - counter.b_maxsum([])
+
+        assert gain_large == pytest.approx(7 / 6)
+        assert gain_small == 0
+        assert gain_large > gain_small
+
+    def test_select_coverage_pads_to_k(self, counter):
+        plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (1, 'RSI'), (2, 'SIR'), (1, 'RIS'))
+
+        selected = counter.extract(plans, k=5, indicator='bcoverage')
+
+        assert len(selected) == 5
+        assert counter.b_coverage(selected) == 3
+
+
+# ----------------------------------------------------------------------
+# Test 3: the weights and the range of the distance
+# ----------------------------------------------------------------------
+
+class TestWeightConvention:
+    """Def. feature asks for a per-dimension distance in [0, 1] and a positive
+    weight; Prop. separable then puts the behaviour distance in [0, 1] when the
+    weights sum to one. Uniform 1/n is the counter's default, and the paper's
+    example weights."""
+
+    def test_undeclared_weights_are_uniform(self, counter):
+        assert [dim.weight for dim in counter.dimensions.values()] == [0.5, 0.5]
+
+    def test_every_pair_distance_lies_in_the_unit_interval(self, counter):
+        orders = [''.join(p) for p in itertools.permutations('RSI')]
+        plans = counter.make_plans(*[(rovers, order) for rovers in (1, 2) for order in orders])
+        behaviours = [plan.behaviour for plan in plans]
+
+        distances = [counter._pair_distance(a, b) for a in behaviours for b in behaviours]
+
+        assert min(distances) == 0.0
+        assert max(distances) == pytest.approx(1.0)
+
+    def test_the_distance_is_definite(self, counter):
+        """Zero exactly on equal behaviours, as Def. separable-distance assumes."""
+        a, b, c = counter.make_plans((1, 'RSI'), (1, 'RSI'), (2, 'RSI'))
+
+        assert counter._pair_distance(a.behaviour, b.behaviour) == 0.0
+        assert counter._pair_distance(a.behaviour, c.behaviour) > 0.0
 
 
 # ----------------------------------------------------------------------
@@ -265,7 +364,39 @@ class TestSelectorsHonourTheirIndicators:
 
         selected = counter.extract(plans, k=2, indicator='bmaxsum')
 
-        assert counter.b_maxsum(selected) == pytest.approx(2.0)
+        assert counter.b_maxsum(selected) == pytest.approx(1.0)
+
+    def test_coverage_selection_keeps_the_cheapest_plan_per_behaviour(self, counter):
+        """Which plan represents a behaviour is left open by Thm. bcov-greedy;
+        the paper takes the cheapest one in the pool, as MAP-Elites keeps the
+        fittest solution per cell. Pool order is not cost order here."""
+        dear, cheap, other = counter.make_plans((1, 'RSI', 9), (1, 'RSI', 2), (2, 'SIR', 5))
+
+        selected = counter.extract([dear, cheap, other], k=2, indicator='bcoverage')
+
+        assert selected == [cheap, other]
+
+    def test_coverage_selection_breaks_cost_ties_towards_the_earliest_plan(self, counter):
+        first, second = counter.make_plans((1, 'RSI', 3), (1, 'RSI', 3))
+
+        assert counter.extract([first, second], k=1, indicator='bcoverage') == [first]
+
+    def test_novelty_selection_takes_a_fresh_behaviour_even_when_it_lowers_the_value(
+        self, counter
+    ):
+        """B-Novelty is not monotone, so a new behaviour can pull the value
+        below what a duplicate would have preserved. The greedy still ranks
+        only the fresh candidates, as the paper's rules all do, and the fall
+        shows in the indicator of the returned set rather than in a duplicate
+        handed to the user in place of an option."""
+        a, b, a_again, c = counter.make_plans((1, 'RSI'), (2, 'SIR'), (1, 'RSI'), (2, 'RSI'))
+        assert counter.b_novelty([a, b], k_nn=1) == pytest.approx(1.0)
+        assert counter.b_novelty([a, b, c], k_nn=1) < 1.0
+
+        selected = counter.extract([a, b, a_again, c], k=3, indicator='bnovelty', k_nn=1)
+
+        assert counter.b_coverage(selected) == 3
+        assert counter.b_novelty(selected, k_nn=1) < 1.0
 
     def test_ties_break_towards_the_lowest_plan_index(self, counter):
         """Two plans exhibit the same behaviour; the earlier one must be taken."""
@@ -307,9 +438,7 @@ DETERMINISM_SCRIPT = r'''
 import json, random, sys
 sys.path.insert(0, {tests!r})
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {paperexps!r})
 from test_golden import StubCounter
-from paperexps.baseline import Stability, greedy_maxsum_stability
 
 rng = random.Random(int(sys.argv[1]))
 specs = [(rng.randint(1, 4), ''.join(rng.sample('RIS', 3))) for _ in range(40)]
@@ -321,19 +450,16 @@ out = {{}}
 for indicator in ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty'):
     selected = counter.extract(plans, k=8, indicator=indicator)
     out[indicator] = [position[id(plan)] for plan in selected]
-out['maxsum_stability'] = [position[id(plan)]
-                           for plan in greedy_maxsum_stability(plans, 8)]
 out['scores'] = [round(counter.b_maxsum(plans), 12),
                  round(counter.b_maxmin(plans), 12),
-                 round(counter.b_novelty(plans), 12),
-                 round(Stability(plans).maxsum(plans), 12)]
+                 round(counter.b_novelty(plans), 12)]
 print(json.dumps(out, sort_keys=True))
 '''
 
 
 class TestDeterminism:
     """The same seed and the same inputs must give byte-identical selections,
-    for all five selectors.
+    for all four selectors.
 
     Run in subprocesses under different PYTHONHASHSEED values, because that is
     what a hidden dependence on set or dict iteration order actually looks
@@ -352,9 +478,7 @@ class TestDeterminism:
         here = os.path.dirname(os.path.abspath(__file__))
         root = os.path.dirname(here)
         script = tmp_path / f'determinism_{hash_seed}.py'
-        script.write_text(DETERMINISM_SCRIPT.format(
-            tests=here, root=root,
-            paperexps=os.path.join(root, 'paper-experiments')))
+        script.write_text(DETERMINISM_SCRIPT.format(tests=here, root=root))
         environment = dict(os.environ, PYTHONHASHSEED=str(hash_seed))
         result = subprocess.run([sys.executable, str(script), str(seed)],
                                 capture_output=True, text=True, env=environment)
@@ -366,8 +490,7 @@ class TestDeterminism:
         second = self._run(tmp_path, seed=2026, hash_seed=987654321)
 
         assert first == second
-        for selector in ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty',
-                         'maxsum_stability'):
+        for selector in ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty'):
             assert first[selector] == second[selector], selector
 
     def test_a_third_hash_seed_agrees_too(self, tmp_path):
@@ -383,114 +506,3 @@ class TestDeterminism:
         other = self._run(tmp_path, seed=7, hash_seed=0)
 
         assert first != other
-
-
-# ----------------------------------------------------------------------
-# Test 8: multiset stability
-# ----------------------------------------------------------------------
-
-class TestMultisetStability:
-    """p = [a, a, b] against q = [a, b].
-
-    Under the multiset reading the intersection is 2 and the union 3, so
-    stability(p, q) = 1/3. Under the set reading both are {a, b} and it is 0.
-    The two readings *must* differ here, or the multiset implementation is
-    quietly the set one and the baseline has been handed a weaker notion of
-    difference than Katz and Sohrabi defined.
-    """
-
-    @pytest.fixture
-    def pair(self):
-        return (StubPlan(1, 'RIS', actions=['a', 'a', 'b']),
-                StubPlan(1, 'RIS', actions=['a', 'b']))
-
-    def test_the_multiset_reading(self, pair):
-        from paperexps.baseline import Stability
-
-        assert Stability(multiset=True).distance(*pair) == pytest.approx(1 / 3)
-
-    def test_the_set_reading(self, pair):
-        from paperexps.baseline import Stability
-
-        assert Stability(multiset=False).distance(*pair) == pytest.approx(0.0)
-
-    def test_the_two_readings_actually_differ(self, pair):
-        from paperexps.baseline import Stability
-
-        assert Stability(multiset=True).distance(*pair) != \
-               Stability(multiset=False).distance(*pair)
-
-    def test_the_multiset_reading_is_the_default(self, pair):
-        from paperexps.baseline import Stability
-
-        assert Stability().distance(*pair) == pytest.approx(1 / 3)
-
-    def test_order_never_matters_under_either_reading(self):
-        from paperexps.baseline import Stability
-
-        p = StubPlan(1, 'RIS', actions=['a', 'b', 'a'])
-        q = StubPlan(1, 'RIS', actions=['a', 'a', 'b'])
-
-        for multiset in (True, False):
-            assert Stability(multiset=multiset).distance(p, q) == pytest.approx(0.0)
-
-    def test_disjoint_plans_score_one(self):
-        from paperexps.baseline import Stability
-
-        p = StubPlan(1, 'RIS', actions=['a', 'a'])
-        q = StubPlan(1, 'RIS', actions=['b'])
-
-        assert Stability().distance(p, q) == pytest.approx(1.0)
-
-    def test_two_empty_plans_are_identical(self):
-        from paperexps.baseline import Stability
-
-        p, q = StubPlan(1, 'RIS', actions=[]), StubPlan(1, 'RIS', actions=[])
-
-        assert Stability().distance(p, q) == pytest.approx(0.0)
-
-    def test_a_repeated_action_is_what_separates_the_readings(self):
-        """Four drives against one: identical as sets, far apart as multisets."""
-        from paperexps.baseline import Stability
-
-        many = StubPlan(1, 'RIS', actions=['drive'] * 4 + ['sample'])
-        once = StubPlan(1, 'RIS', actions=['drive', 'sample'])
-
-        assert Stability(multiset=False).distance(many, once) == pytest.approx(0.0)
-        assert Stability(multiset=True).distance(many, once) == pytest.approx(1 - 2 / 5)
-
-
-class TestGreedyMaxSumStability:
-    def test_it_opens_on_the_farthest_pair(self):
-        from paperexps.baseline import greedy_maxsum_stability
-
-        near_a = StubPlan(1, 'RIS', actions=['a', 'b'])
-        near_b = StubPlan(1, 'RIS', actions=['a', 'b', 'c'])
-        far = StubPlan(1, 'RIS', actions=['x', 'y', 'z'])
-
-        selected = greedy_maxsum_stability([near_a, near_b, far], k=2)
-
-        assert set(map(id, selected)) == {id(near_a), id(far)}
-
-    def test_it_returns_exactly_k_plans(self):
-        from paperexps.baseline import greedy_maxsum_stability
-
-        plans = [StubPlan(1, 'RIS', actions=[f'a{i}', 'shared']) for i in range(10)]
-
-        assert len(greedy_maxsum_stability(plans, k=4)) == 4
-
-    def test_k_beyond_the_pool_returns_the_pool(self):
-        from paperexps.baseline import greedy_maxsum_stability
-
-        plans = [StubPlan(1, 'RIS', actions=[f'a{i}']) for i in range(3)]
-
-        assert len(greedy_maxsum_stability(plans, k=99)) == 3
-
-    def test_ties_fall_to_the_lowest_pool_index(self):
-        from paperexps.baseline import greedy_maxsum_stability
-
-        plans = [StubPlan(1, 'RIS', actions=[letter]) for letter in 'abcd']
-
-        selected = greedy_maxsum_stability(plans, k=3)
-
-        assert [plan.actions[0] for plan in selected] == ['a', 'b', 'c']

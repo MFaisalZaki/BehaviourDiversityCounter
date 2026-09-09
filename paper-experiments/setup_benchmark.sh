@@ -28,7 +28,17 @@
 #   ./setup_benchmark.sh --experiment runtime --submit --yes
 #   ./setup_benchmark.sh --skip-existing --submit --yes   # resume a partial sweep
 #   ./setup_benchmark.sh --local-jobs 4 --yes
+#   ./setup_benchmark.sh --experiment E1,E2,E3 --submit --yes
+#   ./setup_benchmark.sh --planners --yes                # also install forbid-iterative into the venv
 #   ./setup_benchmark.sh --list-experiments
+#
+# Generation entries ("kind": "generate", e.g. GEN-fi-q2) are built first.
+# When they are submitted, the evaluation experiments are not listed yet --
+# their tasks are the pool files the generation is about to write -- so a
+# follow-up job is submitted with a dependency on the generation arrays that
+# re-runs this script for the evaluation experiments once the pools exist.
+# Every evaluation array is followed by a report job (--dependency=afterany)
+# that builds its CSVs, tables and figures.
 #
 set -euo pipefail
 
@@ -53,6 +63,7 @@ PACKAGES=""
 LOCAL_JOBS="0"                 # >0 runs the manifests here instead of on slurm
 SKIP_FETCH="no"
 SKIP_INSTALL="no"
+PLANNERS="no"
 SKIP_EXISTING="no"
 LIST_EXPERIMENTS="no"
 SUBMIT="no"
@@ -68,7 +79,7 @@ usage() {
 One-shot setup for the paper's evaluation sweep. Builds every experiment the
 configuration declares unless --experiment narrows it.
 
-  --experiment NAME       build only this one ("all" is the default)
+  --experiment NAMES      build only these, comma-separated ("all" is the default)
   --config-file PATH      experiment configuration (default: paperexps/exp-cfg-files/default.json)
   --list-experiments      print the experiments the configuration declares and exit
   --venv-dir DIR          virtualenv location          (default: <repo>/venv)
@@ -86,6 +97,7 @@ configuration declares unless --experiment narrows it.
   --submit                sbatch each array; without this the commands are printed
   --local-jobs N          run the task lists here with N workers instead of slurm
 
+  --planners              pip-install forbid-iterative (IBM/forbiditerative, builds Fast Downward)
   --extras LIST           comma-separated package extras to install
   --packages "A B"        extra pip packages
   --skip-fetch            do not clone or unpack anything
@@ -116,6 +128,7 @@ while [ $# -gt 0 ]; do
         --extras)           EXTRAS="$2"; shift 2 ;;
         --packages)         PACKAGES="$2"; shift 2 ;;
         --skip-fetch)       SKIP_FETCH="yes"; shift ;;
+        --planners)         PLANNERS="yes"; shift ;;
         --skip-install)     SKIP_INSTALL="yes"; shift ;;
         -y|--yes)           ASSUME_YES="yes"; shift ;;
         -h|--help)          usage; exit 0 ;;
@@ -171,6 +184,8 @@ here = os.path.dirname(os.path.dirname(os.path.abspath(config_path)))   # .../pa
 if mode == 'paths':                               # everything the sweep reads and writes
     for key in ('plansdir', 'benchmark', 'ru-info', 'dump-dir'):
         print(os.path.join(here, entry[key]))
+elif mode == 'kind':
+    print(entry.get('kind', 'evaluate'))
 PY
 }
 
@@ -204,9 +219,23 @@ fi
 if [ "$EXPERIMENT" = "all" ]; then
     SELECTED="$EXPERIMENT_NAMES"
 else
-    declared "$EXPERIMENT" || die "no experiment '${EXPERIMENT}' in ${CONFIG_FILE}"
-    SELECTED="$EXPERIMENT"
+    SELECTED=""
+    for one in $(printf '%s' "$EXPERIMENT" | tr ',' ' '); do
+        declared "$one" || die "no experiment '${one}' in ${CONFIG_FILE}"
+        SELECTED="${SELECTED}${one}
+"
+    done
 fi
+# Generation sweeps first: the evaluation reads the pools they write.
+GENERATION=""; EVALUATION=""
+for one in $SELECTED; do
+    if [ "$(config_query kind "$one")" = "generate" ]; then
+        GENERATION="${GENERATION}${one} "
+    else
+        EVALUATION="${EVALUATION}${one} "
+    fi
+done
+SELECTED="${GENERATION}${EVALUATION}"
 
 ask "Virtualenv directory"                       "$VENV_DIR"      VENV_DIR
 ask "Per-task time limit"                        "$TIME_LIMIT"    TIME_LIMIT
@@ -236,6 +265,10 @@ else
         say "installing the library and the harness"
         python -m pip install --quiet -e "${REPO_DIR}"
     fi
+    if [ "$PLANNERS" = "yes" ]; then
+        say "installing forbid-iterative (builds Fast Downward; needs cmake and a C++ compiler)"
+        python -m pip install --quiet "git+https://github.com/IBM/forbiditerative.git"
+    fi
     if [ -n "$PACKAGES" ]; then
         say "installing extra packages: ${PACKAGES}"
         # word-split deliberately: --packages takes a space-separated list
@@ -252,6 +285,47 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
 # Everything below is per experiment: each writes its own manifest and its own
 # array, so one can be resubmitted without disturbing the other.
 GENERATED=""
+GEN_JOB_IDS=""          # generation arrays submitted in this run
+EVAL_JOB_IDS=""         # per experiment, the arrays a report job waits for
+
+# submit <sbatch-file> [dependency-ids] -> prints the job id
+submit_job() {
+    local file="$1" deps="${2:-}" id
+    command -v sbatch >/dev/null 2>&1 || die "sbatch not found on this machine"
+    if [ -n "$deps" ]; then
+        id="$(sbatch --parsable --dependency="afterany:${deps}" "$file")"
+    else
+        id="$(sbatch --parsable "$file")"
+    fi
+    id="${id%%;*}"
+    say "submitted ${file} as job ${id}${deps:+ (after ${deps})}" >&2
+    printf '%s' "$id"
+}
+
+# write_report_job <experiment> <jobs-dir> <log-dir> -> the sbatch file
+write_report_job() {
+    local name="$1" jobs_dir="$2" log_dir="$3" file="${2}/${1}.report.sbatch"
+    {
+        echo '#!/usr/bin/env bash'
+        echo "#SBATCH --job-name=bdc-${name}-report"
+        echo "#SBATCH --time=01:00:00"
+        echo "#SBATCH --mem=${MEMORY_LIMIT}"
+        echo "#SBATCH --cpus-per-task=1"
+        echo "#SBATCH --output=${log_dir}/%x-%j.out"
+        echo "#SBATCH --error=${log_dir}/%x-%j.err"
+        if [ -n "$PARTITION" ]; then echo "#SBATCH --partition=${PARTITION}"; fi
+        if [ -n "$ACCOUNT" ];   then echo "#SBATCH --account=${ACCOUNT}";     fi
+        if [ -n "$QOS" ];       then echo "#SBATCH --qos=${QOS}";             fi
+        cat <<EOF
+# Generated by setup_benchmark.sh: the report of ${name}, run once its arrays are done.
+set -euo pipefail
+cd "${PAPEREXPS}"
+exec "${VENV_PYTHON}" runnner.py --config-file "${CONFIG_FILE}" --experiment-name "${name}" --report
+EOF
+    } > "$file"
+    chmod +x "$file"
+    printf '%s' "$file"
+}
 
 build_experiment() {
     local name="$1"
@@ -316,7 +390,10 @@ build_experiment() {
     ( cd "$PAPEREXPS" && "$VENV_PYTHON" runnner.py \
           --config-file "$CONFIG_FILE" --experiment-name "$name" --list-tasks ) > "$all_tasks"
     total="$(wc -l < "$all_tasks" | tr -d ' ')"
-    [ "$total" -gt 0 ] || die "'${name}' matched no tasks"
+    if [ "$total" -eq 0 ]; then
+        warn "'${name}' matched no tasks (no pools on disk for it yet?); skipping it"
+        return 0
+    fi
 
     if [ "$SKIP_EXISTING" = "yes" ]; then
         : > "$manifest"
@@ -331,6 +408,13 @@ build_experiment() {
     say "${count} of ${total} tasks to run"
     if [ "$count" -eq 0 ]; then
         say "nothing to do for '${name}'"
+        if [ "$(config_query kind "$name")" != "generate" ]; then
+            if [ "$LOCAL_JOBS" -gt 0 ] 2>/dev/null; then
+                ( cd "$PAPEREXPS" && "$VENV_PYTHON" runnner.py --config-file "$CONFIG_FILE" --experiment-name "$name" --report )
+            elif [ "$SUBMIT" = "yes" ]; then
+                submit_job "$(write_report_job "$name" "$jobs_dir" "$log_dir")" > /dev/null
+            fi
+        fi
         return 0
     fi
 
@@ -341,6 +425,10 @@ build_experiment() {
             "$VENV_PYTHON" runnner.py --config-file "$CONFIG_FILE" \
                 --experiment-name "$name" --task-id {} )
         say "done; results in ${dump_dir}"
+        if [ "$(config_query kind "$name")" != "generate" ]; then
+            say "building the report of ${name}"
+            ( cd "$PAPEREXPS" && "$VENV_PYTHON" runnner.py --config-file "$CONFIG_FILE" --experiment-name "$name" --report )
+        fi
         return 0
     fi
 
@@ -433,24 +521,77 @@ EOF
         GENERATED="${GENERATED}${sbatch_file}
 "
         if [ "$SUBMIT" = "yes" ]; then
-            command -v sbatch >/dev/null 2>&1 || die "sbatch not found on this machine"
-            sbatch "$sbatch_file"
+            job_id="$(submit_job "$sbatch_file")"
+            if [ "$(config_query kind "$name")" = "generate" ]; then
+                GEN_JOB_IDS="${GEN_JOB_IDS:+${GEN_JOB_IDS}:}${job_id}"
+            else
+                EVAL_JOB_IDS="${EVAL_JOB_IDS:+${EVAL_JOB_IDS}:}${job_id}"
+            fi
         fi
     done
+
+    # The report waits for every array of this experiment.
+    if [ "$SUBMIT" = "yes" ] && [ "$(config_query kind "$name")" != "generate" ] && [ -n "$EVAL_JOB_IDS" ]; then
+        submit_job "$(write_report_job "$name" "$jobs_dir" "$log_dir")" "$EVAL_JOB_IDS" > /dev/null
+        EVAL_JOB_IDS=""
+    fi
 
     say "manifest ${manifest}"
 }
 
-for experiment_name in $SELECTED; do
+for experiment_name in $GENERATION; do
     build_experiment "$experiment_name"
 done
+
+# Evaluation after generation: when generation arrays were just submitted,
+# the evaluation's task lists would miss the pools those arrays will write,
+# so a follow-up job builds and submits the evaluation once they are done.
+if [ -n "$EVALUATION" ]; then
+    if [ "$SUBMIT" = "yes" ] && [ -n "$GEN_JOB_IDS" ]; then
+        eval_list="$(printf '%s' "$EVALUATION" | tr ' ' ',' | sed 's/,*$//')"
+        first_eval="$(printf '%s' "$EVALUATION" | cut -d' ' -f1)"
+        chain_dir="$(dirname "$(config_query paths "$first_eval" | sed -n '4p')")/slurm"
+        mkdir -p "${chain_dir}/logs"
+        chain_file="${chain_dir}/evaluation.chain.sbatch"
+        {
+            echo '#!/usr/bin/env bash'
+            echo "#SBATCH --job-name=bdc-evaluation-chain"
+            echo "#SBATCH --time=02:00:00"
+            echo "#SBATCH --mem=4GB"
+            echo "#SBATCH --cpus-per-task=1"
+            echo "#SBATCH --output=${chain_dir}/logs/%x-%j.out"
+            echo "#SBATCH --error=${chain_dir}/logs/%x-%j.err"
+            if [ -n "$PARTITION" ]; then echo "#SBATCH --partition=${PARTITION}"; fi
+            if [ -n "$ACCOUNT" ];   then echo "#SBATCH --account=${ACCOUNT}";     fi
+            if [ -n "$QOS" ];       then echo "#SBATCH --qos=${QOS}";             fi
+            cat <<EOF
+# Generated by setup_benchmark.sh: builds and submits the evaluation arrays
+# once the generation arrays (${GEN_JOB_IDS}) have finished.
+set -euo pipefail
+exec "${SCRIPT_DIR}/setup_benchmark.sh" --experiment "${eval_list}" --config-file "${CONFIG_FILE}" \
+    --venv-dir "${VENV_DIR}" --skip-install --skip-fetch --skip-existing --submit --yes \
+    --time-limit "${TIME_LIMIT}" --memory-limit "${MEMORY_LIMIT}" --cpus "${CPUS}" \
+    --max-parallel "${MAX_PARALLEL}" --chunk-size "${CHUNK_SIZE}" \
+    ${PARTITION:+--partition "${PARTITION}"} ${ACCOUNT:+--account "${ACCOUNT}"} ${QOS:+--qos "${QOS}"}
+EOF
+        } > "$chain_file"
+        chmod +x "$chain_file"
+        submit_job "$chain_file" "$GEN_JOB_IDS" > /dev/null
+        say "the evaluation (${eval_list}) is built and submitted by ${chain_file} once generation is done"
+    else
+        for experiment_name in $EVALUATION; do
+            build_experiment "$experiment_name"
+        done
+    fi
+fi
 
 # ------------------------------------------------------------ next steps --
 if [ "$LOCAL_JOBS" -gt 0 ] 2>/dev/null; then
     echo
     say "all requested experiments have been run locally"
-    warn "the runtime experiment measures wall clock: with more than one worker,"
-    warn "or on a node sharing its CPUs, its numbers are of the machine's load."
+    warn "E5 measures selection time: with more than one worker, or on a node"
+    warn "sharing its CPUs, its numbers are of the machine's load."
+    say "build the reports with: cd ${PAPEREXPS} && ${VENV_PYTHON} runnner.py --config-file ${CONFIG_FILE} --experiment-name <E?> --report"
     exit 0
 fi
 
@@ -469,9 +610,14 @@ if [ "$SUBMIT" != "yes" ]; then
   watch it            squeue -u \$USER
   resume a partial run
                       ${BASH_SOURCE[0]} --skip-existing --submit --yes
+  (with --submit, generation arrays run first, a chain job then builds and
+   submits the evaluation arrays, and each of those is followed by its
+   report job; without --submit the files above are what would be submitted)
   run it here instead ${BASH_SOURCE[0]} --local-jobs 4 --yes
 
-  The runtime experiment measures wall clock: give it a node that is not
-  sharing its CPUs, or its numbers are of the machine's load.
+  build the reports  cd ${PAPEREXPS} && ${VENV_PYTHON} runnner.py --config-file ${CONFIG_FILE} --experiment-name <E?> --report
+
+  E5 measures selection time: give it a node that is not sharing its CPUs,
+  or its numbers are of the machine's load.
 EOF
 fi

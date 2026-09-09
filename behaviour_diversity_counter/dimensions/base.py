@@ -1,22 +1,65 @@
 from collections.abc import Mapping
 
 
-def declaration_source(addinfo):
-    """The declaration file a dimension was pointed at.
+def options(addinfo):
+    """A dimension's ``addinfo`` as a mapping.
 
-    Either the path on its own, or the ``'file'`` entry of a mapping that also
-    carries the dimension's weight.
+    ``None`` means nothing was supplied; a bare string is the path of the
+    dimension's declaration file; a mapping is taken as it is.
     """
-    return addinfo.get('file') if isinstance(addinfo, Mapping) else addinfo
+    if addinfo is None:
+        return {}
+    if isinstance(addinfo, Mapping):
+        return addinfo
+    return {'file': addinfo}
+
+
+def declaration_source(addinfo):
+    """The declaration file a dimension was pointed at, if any."""
+    return options(addinfo).get('file')
+
+
+def declared_weight(addinfo):
+    """The weight a dimension's ``addinfo`` declares, or None when it does not.
+
+    The counter turns None into the uniform ``1/n`` when no dimension declares
+    a weight, so this must stay distinguishable from an explicit ``1.0``.
+    """
+    return options(addinfo).get('weight')
+
+
+def token_payload(behaviour, name):
+    """The value one dimension wrote into a behaviour string, or None.
+
+    Matched on the token *prefix*, not as a substring: predicate and object
+    names in other tokens may contain a dimension's name ('truck1' holds 'ru').
+    """
+    for part in behaviour.split('$$'):
+        part = part.strip()
+        if part.startswith(name + ':'):
+            return part[len(name) + 1:].strip()
+    return None
 
 
 class BehaviourDimension:
-    def __init__(self, task, name, addinfo, weight=1.0):
+    """One feature of the paper's Def. feature: a dimension, its extracting
+    function (``plan_behaviour``), its per-dimension distance in ``[0, 1]``
+    (``distance``, before the weight is applied) and its weight.
+    """
+
+    def __init__(self, task, name, addinfo, weight=None):
         self.task    = task
         self.name    = name
         self.addinfo = addinfo
-        self.weight  = weight
+        self.declared_weight = weight is not None
+        self.weight  = 1.0 if weight is None else float(weight)
         self.domain  = set()
+
+    def payload(self, behaviour):
+        """This dimension's own token value out of a joined behaviour string."""
+        value = token_payload(behaviour, self.name)
+        assert value is not None, 'The dimension value should be present in the plan behaviour.'
+        return value
 
     def distance(self, b1, b2):
         """This dimension's term of ``d(b, b') = sum_i w_i * d_i(b_i, b'_i)``.

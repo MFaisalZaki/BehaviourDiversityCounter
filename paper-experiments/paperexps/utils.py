@@ -1,14 +1,16 @@
-"""Matching ForbidIterative pool files to the PDDL tasks they were planned for.
+"""Matching pool files to the PDDL tasks they were planned for.
 
 Pool files in the plans directory are named
 
-    {q}-{k}-{track}-{year}-{domain}-{inst}-fi-bc-results.json
+    {q}-{k}-{track}-{year}-{domain}-{inst}-{generator}-results.json
     e.g. 1.0-100-classical-2006-rovers-15-fi-bc-results.json
 
 where ``domain`` is the ``name`` field of a classical-domains ``api.py`` entry,
-``year`` its ``ipc`` field ('None' for the non-IPC domains) and ``inst`` the
+``year`` its ``ipc`` field ('None' for the non-IPC domains), ``inst`` the
 1-based position of the problem in that entry's problem list sorted by file
-name.
+name, and ``generator`` the tag of the planner that produced the pool --
+``fi-bc`` for forbid-iterative, ``topk`` for the top-k planner, ``topq`` for
+the top-quality planner (see :data:`GENERATOR_NAMES`).
 
 (domain, year) does not name a directory.  1998/logistics lives in
 ``logistics98`` and 2002/rovers in ``rovers-02``; where an IPC year ran both an
@@ -35,7 +37,16 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-RESULTS_SUFFIX = '-fi-bc-results.json'
+RESULTS_SUFFIX = '-results.json'
+
+#: Pool-file generator tags and the generator each names.
+GENERATOR_NAMES = {
+    'fi-bc': 'forbid-iterative',
+    'fi': 'forbid-iterative',
+    'topk': 'top-k',
+    'symk': 'top-k',
+    'topq': 'top-quality',
+}
 
 # Fast Downward suffixes a name with ``_<n>`` where it disambiguated a clash
 # (floortile's action ``up`` against its predicate ``up``) or split an action on
@@ -45,8 +56,13 @@ FD_SUFFIX_RE = re.compile(r'_\d+$')
 
 POOL_RE = re.compile(
     r'^(?P<q>[\d.]+)-(?P<k>\d+)-(?P<track>[a-z]+)-(?P<year>[A-Za-z0-9]+)-'
-    r'(?P<domain>.+)-(?P<inst>\d+)' + re.escape(RESULTS_SUFFIX) + r'$'
+    r'(?P<domain>.+)-(?P<inst>\d+)-(?P<generator>[a-z0-9]+(?:-[a-z0-9]+)*)'
+    + re.escape(RESULTS_SUFFIX) + r'$'
 )
+
+
+def generator_name(tag):
+    return GENERATOR_NAMES.get(tag, tag)
 
 
 def dumpfile_name(taskdetails):
@@ -56,13 +72,19 @@ def dumpfile_name(taskdetails):
     answerable from the task record alone.
     """
     return (f"{taskdetails['track']}-{taskdetails['year']}-{taskdetails['domain']}"
-            f"-{taskdetails['inst']}-{taskdetails['q']}-{taskdetails['k']}.json")
+            f"-{taskdetails['inst']}-{taskdetails['q']}-{taskdetails['k']}"
+            f"-{taskdetails['generator']}.json")
 
 
 def create_dump_dir(dump_dir):
     dump_dir_path = os.path.join(HERE, dump_dir)
     os.makedirs(dump_dir_path, exist_ok=True)
     return dump_dir_path
+
+
+def resolve(path):
+    """A configuration path, taken against this package like every other."""
+    return os.path.join(HERE, path)
 
 
 def _domain_index(root):
@@ -98,42 +120,41 @@ def match_plans_with_problems(plans_dir, problems_dir, ru_info):
 
     ``problems_dir`` is the classical-domains checkout, either its root or its
     ``classical/`` directory.  ``ru_info`` is the ru-info tree, whose
-    ``instances[inst]`` holds a task's ``(:resource ...)`` declarations.  Relative
-    paths are taken against this package, matching :func:`create_dump_dir`.
+    ``instances[inst]`` holds a task's ``(:resource ...)`` declarations; the
+    declarations a task needs are written next to them as ``<task_id>.txt``.
+    Relative paths are taken against this package, matching :func:`create_dump_dir`.
 
     Returns a list of dicts sorted by pool file name::
 
-        {'task_id': '1.0-10-classical-1998-gripper-1',
+        {'task_id': '1.0-10-classical-1998-gripper-1-fi-bc',
          'pool_file': '/.../1.0-10-classical-1998-gripper-1-fi-bc-results.json',
          'domain': 'gripper', 'year': '1998', 'inst': 1,
          'q': 1.0, 'k': 10, 'track': 'classical',
+         'generator': 'fi-bc', 'generator_name': 'forbid-iterative',
          'domain_dir': 'gripper',
          'domain_file': '/.../classical/gripper/domain.pddl',
          'problem_file': '/.../classical/gripper/prob01.pddl',
          'resolved_by': 'only api.py candidate',
-         'resources': '(:resource left 100 0 5)\n(:resource right 100 0 5)'}
+         'resources': '/.../ru-info/1.0-10-classical-1998-gripper-1-fi-bc.txt'}
 
-    ``resources`` is None where ru-info declares none: it covers 35 of the 69
-    (domain, year) pairs the pools span.  Pools whose domain directory cannot be
-    pinned down are dropped, with a summary on stderr.
+    ``resources`` is None where ru-info declares none, and the task is kept:
+    the agents-used feature is simply omitted for it.  Pools whose domain
+    directory cannot be pinned down are dropped, with a summary on stderr.
     """
-    ru_files_dir = os.path.join(HERE, ru_info)
-    os.makedirs(ru_files_dir, exist_ok=True)
+    ru_root = resolve(ru_info)
+    os.makedirs(ru_root, exist_ok=True)
 
-    plans_root = os.path.join(HERE, plans_dir)
+    plans_root = resolve(plans_dir)
     if not os.path.isdir(plans_root):
         raise FileNotFoundError(f'no plans directory at {plans_root}')
 
-    problems_root = os.path.join(HERE, problems_dir)
+    problems_root = resolve(problems_dir)
     if os.path.isdir(os.path.join(problems_root, 'classical')):
         problems_root = os.path.join(problems_root, 'classical')
     if not os.path.isdir(problems_root):
         raise FileNotFoundError(f'no benchmark directory at {problems_root}')
     index = _domain_index(problems_root)
 
-    ru_root = os.path.join(HERE, ru_info)
-    if not os.path.isdir(ru_root):
-        raise FileNotFoundError(f'no ru-info directory at {ru_root}')
     resources = {}                    # (domain, year) -> {instance: declarations}
     for dirpath, _, names in os.walk(ru_root):
         for name in sorted(names):
@@ -199,17 +220,20 @@ def match_plans_with_problems(plans_dir, problems_dir, ru_info):
                                            f'({len(problems)} problems)'))
                 continue
             domain_path, problem_path = problems[inst - 1]
+            task_id = os.path.basename(pool['path'])[:-len(RESULTS_SUFFIX)]
 
-            # dump ru-info to file.
-            ru_file = os.path.join(ru_files_dir, f"{os.path.basename(pool['path'])[:-len(RESULTS_SUFFIX)]}.txt")
-            with open(ru_file, 'w') as f:
-                _details = resources.get(key, {}).get(str(inst))
-                if _details is None: continue
-                for line in _details.splitlines():
-                    f.write(line + '\n')
+            # The task's (:resource ...) declarations, written where the
+            # dimension can read them; None where ru-info declares none.
+            details = resources.get(key, {}).get(str(inst))
+            ru_file = None
+            if details is not None:
+                ru_file = os.path.join(ru_root, f'{task_id}.txt')
+                with open(ru_file, 'w') as handle:
+                    for line in details.splitlines():
+                        handle.write(line + '\n')
 
             tasks.append({
-                'task_id': os.path.basename(pool['path'])[:-len(RESULTS_SUFFIX)],
+                'task_id': task_id,
                 'pool_file': pool['path'],
                 'domain': pool['domain'],
                 'year': pool['year'],
@@ -217,6 +241,8 @@ def match_plans_with_problems(plans_dir, problems_dir, ru_info):
                 'q': pool['q'],
                 'k': pool['k'],
                 'track': pool['track'],
+                'generator': pool['generator'],
+                'generator_name': generator_name(pool['generator']),
                 'domain_dir': directory,
                 'domain_file': os.path.join(problems_root, domain_path),
                 'problem_file': os.path.join(problems_root, problem_path),
@@ -236,10 +262,47 @@ def match_plans_with_problems(plans_dir, problems_dir, ru_info):
                   f'e.g. {unparsed[0]}', file=sys.stderr)
     return tasks
 
+
+def filter_tasks(tasks, params):
+    """The tasks an experiment declares itself for.
+
+    ``domains``, ``generators``, ``pool-q-values`` and ``pool-k-values`` in the
+    experiment's parameters each narrow the list; absent, they do not.
+    """
+    def wanted(task):
+        if params.get('domains') and task['domain'] not in params['domains']:
+            return False
+        if params.get('generators') and task['generator'] not in params['generators']:
+            return False
+        if params.get('pool-q-values') and task['q'] not in params['pool-q-values']:
+            return False
+        if params.get('pool-k-values') and task['k'] not in params['pool-k-values']:
+            return False
+        return True
+    return [task for task in tasks if wanted(task)]
+
+
+def plan_key(text):
+    """A plan's action lines, for deduplication: comments and blank lines
+    dropped, whitespace normalised."""
+    return tuple(' '.join(line.strip().split()) for line in text.splitlines()
+                 if line.strip().startswith('('))
+
+
+def pool_plan_count(pool_file):
+    """How many plans a pool file holds; 0 for a timed-out (48-byte) pool."""
+    if os.path.getsize(pool_file) <= 48:
+        return 0
+    with open(pool_file, encoding='utf-8') as handle:
+        return len(json.load(handle).get('plans') or [])
+
+
 def construct_task(taskdetails):
     """``(task, plans, info)`` for one matched task: the parsed PDDL problem,
-    its pool's plans, and the pool's own metadata.
+    its pool's plans in generation order, and the pool's own metadata.
 
+    Pools are deduplicated -- two plans with identical action sequences count
+    once -- and ``info['duplicates-dropped']`` says how many went.
     ``info['parse-failures']`` lists any plan that could not be parsed; a
     malformed plan is recorded rather than allowed to kill the whole pool.
     """
@@ -275,7 +338,7 @@ def construct_task(taskdetails):
     actions = fd_names(action.name for action in up_task.actions)
     objects = fd_names(obj.name for obj in up_task.all_objects)
 
-    def resolve(token, known):
+    def resolve_name(token, known):
         # The suffix is only stripped when the direct lookup misses and the
         # stripped name is itself known, so a name genuinely ending in ``_1``
         # wins and a typo is left alone to fail loudly.
@@ -291,25 +354,31 @@ def construct_task(taskdetails):
                 lines.append(line)            # ``;cost``/``;behaviour`` comments
                 continue
             tokens = stripped.strip('()').split()
-            lines.append('(' + ' '.join([resolve(tokens[0], actions)]
-                                        + [resolve(t, objects) for t in tokens[1:]]) + ')')
+            lines.append('(' + ' '.join([resolve_name(tokens[0], actions)]
+                                        + [resolve_name(t, objects) for t in tokens[1:]]) + ')')
         return '\n'.join(lines)
 
     # The pools store plans under Fast Downward's normalised names (lowercased,
     # ``-`` -> ``_``) while the PDDL keeps the originals -- logistics plans say
     # ``load_truck`` for the domain's ``LOAD-TRUCK``.  Parse verbatim first and
     # rewrite only on failure, so a task whose names already match is untouched.
-    up_plans, failures = [], []
+    up_plans, failures, seen, duplicates = [], [], set(), 0
     for index, text in enumerate(pool_data.get('plans') or []):
+        key = plan_key(text)
+        if key in seen:
+            duplicates += 1
+            continue
+        seen.add(key)
         try:
             up_plans.append(reader.parse_plan_string(up_task, text))
-            setattr(up_plans[-1], 'plan_str', text)
         except Exception:
             try:
                 up_plans.append(reader.parse_plan_string(up_task, denormalise(text)))
-                setattr(up_plans[-1], 'plan_str', text)
             except Exception as error:
                 failures.append({'index': index, 'error': f'{type(error).__name__}: {error}'})
+                continue
+        setattr(up_plans[-1], 'plan_str', text)
+        setattr(up_plans[-1], 'pool_index', index)
 
     info = {
         'planning-time': pool_data.get('total-time-seconds', None),
@@ -320,7 +389,10 @@ def construct_task(taskdetails):
         'q': taskdetails['q'],
         'k': taskdetails['k'],
         'track': taskdetails['track'],
+        'generator': taskdetails['generator'],
+        'generator_name': taskdetails['generator_name'],
         'parse-failures': failures,
+        'duplicates-dropped': duplicates,
         'dumpfile-name': dumpfile_name(taskdetails)
     }
 

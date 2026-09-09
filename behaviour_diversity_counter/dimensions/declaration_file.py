@@ -36,7 +36,6 @@ def parse_declaration_file(inputfile, keyword):
 
     No file means the dimension declares nothing, and gets an empty mapping.
     """
-    assert inputfile is not None, f'The {inputfile} file should not be None.'
     declarations = defaultdict(dict)
     if not inputfile:
         return declarations

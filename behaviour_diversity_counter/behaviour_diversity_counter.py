@@ -4,9 +4,12 @@ from functools import partial
 
 from unified_planning.shortcuts import SequentialSimulator
 
+from behaviour_diversity_counter.simulation import InapplicablePlanError, simulate
 from behaviour_diversity_counter.dimensions.goal_predicate_ordering import GoalPredicatesOrderingDimension
 from behaviour_diversity_counter.dimensions.cost_bound_makespan_optimal import MakespanOptimalCostDimension
-from behaviour_diversity_counter.dimensions.resources import ResourceCountDimension, ResourceUsedDimension
+from behaviour_diversity_counter.dimensions.resources import (
+    ResourceCountDimension, ResourceNumberDimension, ResourceUsedDimension)
+from behaviour_diversity_counter.dimensions.cost_bin import CostBinDimension
 from behaviour_diversity_counter.dimensions.utility_value import UtilityValueDimension
 from behaviour_diversity_counter.dimensions.functions import NumericFunctionDimension
 
@@ -15,8 +18,10 @@ dimensions_map = {
     'cb': MakespanOptimalCostDimension,
     'rc': ResourceCountDimension,
     'ru': ResourceUsedDimension,
+    'rn': ResourceNumberDimension,
     'uv': UtilityValueDimension,
-    'fn': NumericFunctionDimension
+    'fn': NumericFunctionDimension,
+    'cbin': CostBinDimension,
 }
 
 #: How many nearest neighbours B-Novelty averages over.
@@ -49,23 +54,56 @@ def best_index(scores):
     """
     return int(np.argmax(np.round(scores, TIE_DECIMALS)))
 
-class InapplicablePlanError(ValueError):
-    """A plan could not be simulated against the task.
-
-    The state trace is what every dimension reads, so a plan that cannot be
-    replayed has no behaviour to report. Counting it anyway would silently
-    inflate the diversity count with a behaviour no valid plan produced.
-    """
 
 class BehaviourDiversityCounter:
-    def __init__(self, task, dimensions):
-        assert not any(map(lambda e: not e[0] in dimensions_map.keys(), dimensions)), f"unknown dimension(s) {[e[0] for e in dimensions if not e[0] in dimensions_map.keys()]}; valid keys: {sorted(dimensions_map)}"
+    """A behaviour space over one task, and the paper's four indicators on it.
+
+    ``dimensions`` is an iterable of ``(key, addinfo)`` pairs, one feature each
+    in the sense of the paper's Def. feature: the key names the dimension and
+    its extracting function, the dimension class supplies the per-dimension
+    distance, and ``addinfo`` may declare the weight (``{'weight': w}``) next
+    to whatever else the dimension needs.
+
+    The behaviour distance is the additively separable one of Def.
+    separable-distance, ``d(b, b') = sum_i w_i * d_i(b_i, b'_i)``. Weights are
+    declared for every dimension or for none: with none declared they default
+    to the uniform ``1/n``, under which the distance is the mean of the
+    per-dimension distances and lies in ``[0, 1]`` (Prop. separable), as in the
+    paper's rover example with weights 1/2, 1/2.
+    """
+
+    def __init__(self, task, dimensions, trace_cache=None):
+        """``trace_cache`` is an optional ``{id(plan): (states, cost)}`` mapping
+        shared between counters over the same task: a plan is simulated by
+        whichever counter meets it first and replayed by none of the others.
+        The caller keeps the plans alive, as the mapping is keyed by identity.
+        """
+        dimensions = list(dimensions)
+        unknown = [name for name, _ in dimensions if name not in dimensions_map]
+        if unknown:
+            raise ValueError(f'unknown dimension(s) {unknown}; valid keys: {sorted(dimensions_map)}')
         self.task = task
         self.dimensions = {name: dimensions_map[name](task, addinfo) for name, addinfo in dimensions}
+        self._apply_weight_convention()
         self._simulator = SequentialSimulator(problem=task)
+        self._trace_cache = trace_cache
         self._behaviour_cache = {}
+        self._cost_cache = {}
         self._behaviour_distance_cache  = {}
-        self._plan_distance_cache = {}
+
+    def _apply_weight_convention(self):
+        """Declared weights for all dimensions or for none; none means uniform."""
+        declared = [name for name, dim in self.dimensions.items() if dim.declared_weight]
+        missing  = [name for name, dim in self.dimensions.items() if not dim.declared_weight]
+        if declared and missing:
+            raise ValueError(f'no weight given for dimension(s): {missing}; '
+                             f'declare a weight for every dimension or for none')
+        if not declared:
+            for dim in self.dimensions.values():
+                dim.weight = 1.0 / len(self.dimensions)
+        invalid = [name for name, dim in self.dimensions.items() if not dim.weight > 0]
+        if invalid:
+            raise ValueError(f'weights must be positive (Def. feature); got non-positive for {invalid}')
 
     # ------------------------------------------------------------------
     # Indicators
@@ -121,37 +159,47 @@ class BehaviourDiversityCounter:
 
         k plans come back whenever the pool holds that many, however the
         indicator moves across the steps -- B-MaxMin can only fall as the
-        selection grows, a minimum over pairs never rising when a pair is added.
+        selection grows, a minimum over pairs never rising when a pair is
+        added. The paper returns the k plans the greedy selects rather than
+        truncating to the best-scoring prefix: the indicator is to certify a
+        set of the requested size, not to choose that size.
         """
+        plans = list(plans)
         extractors = {
             'bcoverage': self._extract_b_coverage,
             'bmaxsum':   partial(self._extract_greedy, aggregate=np.sum),
             'bmaxmin':   partial(self._extract_greedy, aggregate=np.min),
             'bnovelty':  partial(self._extract_b_novelty, k_nn=k_nn),
         }
-        assert indicator in extractors, f"unknown indicator '{indicator}'; valid indicators: {sorted(extractors)}"
+        if indicator not in extractors:
+            raise ValueError(f"unknown indicator '{indicator}'; valid indicators: {sorted(extractors)}")
         # Every plan of the pool gets its `behaviour` attribute, whichever rule
         # runs and whichever early return it takes.
         self._behaviours_of(plans)
         return extractors[indicator](plans, k)
 
     def _extract_b_coverage(self, plans, k):
-        """Take a plan the first time its behaviour appears, then pad.
+        """One plan per behaviour, the cheapest exhibiting it, then pad.
 
         No distances are read, so this never builds the matrix the other three
         rules open on. Nor is the scan a heuristic: every plan covers exactly
         one behaviour, which is what makes greedy selection exact here and
-        approximate everywhere else.
+        approximate everywhere else (Thm. bcov-greedy).
+
+        Which plan represents a behaviour is left open by the theorem, and the
+        paper takes the cheapest plan in the pool that exhibits it, as
+        MAP-Elites keeps the fittest solution per cell; ties fall to the
+        earliest plan. Behaviours are taken in first-occurrence order.
         """
         if k <= 0 or not plans:
             return []
 
-        # dict order is insertion order, so the first index recorded for each
-        # behaviour comes out in first-occurrence order, already ascending.
-        first = {}
-        for idx, behaviour in enumerate(self._behaviours_of(plans)):
-            first.setdefault(behaviour, idx)
-        covered = np.fromiter(first.values(), dtype=np.intp, count=len(first))[:k]
+        cheapest = {}   # behaviour -> index of its cheapest plan, in first-occurrence order
+        costs = self._costs_of(plans)
+        for idx, (behaviour, cost) in enumerate(zip(self._behaviours_of(plans), costs)):
+            if behaviour not in cheapest or cost < costs[cheapest[behaviour]]:
+                cheapest[behaviour] = idx
+        covered = np.fromiter(cheapest.values(), dtype=np.intp, count=len(cheapest))[:k]
 
         # A repeat leaves the count untouched, so once the behaviours run out
         # the tail is padded in plan-index order, as the greedy rules pad theirs.
@@ -227,7 +275,7 @@ class BehaviourDiversityCounter:
         scores = np.where(fresh, scores, -np.inf) if fresh.any() else np.zeros(len(candidates))
         position = best_index(scores)
         return int(candidates[position]), np.delete(candidates, position)
-        
+
     def _extract_b_novelty(self, plans, k, k_nn=DEFAULT_K_NN):
         """The plain greedy of the paper: at every step add the plan maximising
         B-Novelty over the *combined* set.
@@ -241,6 +289,15 @@ class BehaviourDiversityCounter:
         single neighbour is the other, so B-Novelty of a pair is just the
         distance between them, and the farthest pair maximises the indicator
         over every two-plan set exactly as it does for the other two rules.
+
+        Candidates are ranked among the plans whose behaviour is *new* to the
+        selection, the convention the paper states for B-MaxSum and that all
+        three greedy rules share: a duplicate leaves the indicator exactly where
+        it stands, so it is taken only once every remaining candidate repeats a
+        held behaviour. B-Novelty is the one rule for which this needs saying,
+        because it is not monotone: a fresh behaviour can lower the value below
+        what a duplicate would have preserved, and the fresh one is still taken.
+        The indicator reported for the returned set makes that fall visible.
         """
         if k <= 0 or not plans:
             return []
@@ -303,7 +360,7 @@ class BehaviourDiversityCounter:
         return [plans[idx] for idx in selected]
 
     # ------------------------------------------------------------------
-    # Behaviours and distances
+    # Behaviours, costs and distances
     # ------------------------------------------------------------------
 
     def _distinct_behaviours(self, plans):
@@ -313,27 +370,30 @@ class BehaviourDiversityCounter:
         result = []
         for plan in plans:
             if id(plan) not in self._behaviour_cache:
-                setattr(plan, 'states', self._simulate(plan))
+                states, cost = self._simulate(plan)
+                setattr(plan, 'states', states)
+                setattr(plan, 'cost', cost)
                 behaviour = ' $$ '.join(dim.plan_behaviour(plan) for dim in self.dimensions.values())
                 delattr(plan, 'states')  # the trace is only needed while the tokens are built
                 setattr(plan, 'behaviour', behaviour)
                 self._behaviour_cache[id(plan)] = behaviour
+                self._cost_cache[id(plan)] = cost
             result.append(self._behaviour_cache[id(plan)])
         return result
 
+    def _costs_of(self, plans):
+        """Each plan's cost (Def. plan), simulated alongside its behaviour."""
+        self._behaviours_of(plans)
+        return [self._cost_cache[id(plan)] for plan in plans]
+
     def _simulate(self, plan):
-        current_state = self._simulator.get_initial_state()
-        states = [current_state]
-        for step, action_instance in enumerate(plan.actions):
-            next_state = self._simulator.apply(current_state, action_instance)
-            if next_state is None:
-                raise InapplicablePlanError(
-                    f'{action_instance} at step {step} is not applicable to the state '
-                    f'it reaches; the plan cannot be simulated against this task.'
-                )
-            current_state = next_state
-            states.append(current_state)
-        return states
+        """``(states, cost)``; raises InapplicablePlanError when the plan
+        cannot be replayed against the task."""
+        if self._trace_cache is None:
+            return simulate(self.task, plan, self._simulator)
+        if id(plan) not in self._trace_cache:
+            self._trace_cache[id(plan)] = simulate(self.task, plan, self._simulator)
+        return self._trace_cache[id(plan)]
 
     def _pair_distance(self, b1, b2):
         if len(self.dimensions) == 0: return 0.0

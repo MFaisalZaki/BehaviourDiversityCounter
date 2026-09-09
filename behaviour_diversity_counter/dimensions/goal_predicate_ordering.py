@@ -1,12 +1,28 @@
 from collections import defaultdict
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension
+
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight, options
+
 
 class GoalPredicatesOrderingDimension(BehaviourDimension):
+    """``go``: the order in which the goal atoms are first achieved.
+
+    The goal atoms are taken in a canonical order -- the order in which the
+    problem's goal expressions introduce them, sorted by expression identity so
+    that it is the same in every process. Atoms achieved by the same action
+    keep that order between them. ``addinfo['max-goals']`` caps the atoms at
+    the first ``m`` of that order; the cap is recorded as ``self.max_goals``
+    and the atoms actually used as ``self.vars``.
+    """
+
     def __init__(self, task, addinfo=None):
-        super().__init__(task, 'go', addinfo, addinfo.get('weight', 1.0))
+        super().__init__(task, 'go', addinfo, declared_weight(addinfo))
         from unified_planning.model.walkers.free_vars import FreeVarsExtractor
-        vars = list(map(lambda expr: FreeVarsExtractor().get(expr), self.task.goals))
-        self.vars = [elem for s in vars for elem in s]
+        atoms = []
+        for goal in self.task.goals:
+            atoms.extend(sorted(FreeVarsExtractor().get(goal), key=lambda atom: atom.node_id))
+        self.goal_atoms = len(atoms)
+        self.max_goals = options(addinfo).get('max-goals')
+        self.vars = atoms if self.max_goals is None else atoms[:self.max_goals]
 
     def plan_behaviour(self, plan):
         _time_step_history = defaultdict(list)
@@ -17,18 +33,12 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
         self.domain.add(val)
         return f'{self.name}:' + val
 
-    def distance(self, plan1, plan2):
+    def _ordering(self, behaviour):
+        return self.payload(behaviour).replace(' ', '').split('->')
 
-        # Match on the token prefix, not a substring: predicate/object names in
-        # other tokens may contain this dimension's name (e.g. 'truck' vs 'ru').
-        plan1_dim_value = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan1.split('$$')), None)
-        plan2_dim_value = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan2.split('$$')), None)
-
-        assert plan1_dim_value is not None and plan2_dim_value is not None, 'The dimension value should be present in the plan behaviour.'
-
-        plan1_dim_value = plan1_dim_value.strip().replace(self.name + ':', '').replace(' ', '').split('->')
-        plan2_dim_value = plan2_dim_value.strip().replace(self.name + ':', '').replace(' ', '').split('->')
-
-        hamming_distance = [x == y for x,y in zip(plan1_dim_value, plan2_dim_value)].count(False)
-        distance = hamming_distance/len(plan1_dim_value) if len(plan1_dim_value) > 0 else 0.0
-        return self.weight * distance
+    def distance(self, b1, b2):
+        # The Hamming distance between the two orderings, divided by the number
+        # of goals so that it lies in [0, 1] (sec. features of the paper).
+        ordering1, ordering2 = self._ordering(b1), self._ordering(b2)
+        hamming = sum(x != y for x, y in zip(ordering1, ordering2))
+        return self.weight * (hamming / len(ordering1) if ordering1 else 0.0)

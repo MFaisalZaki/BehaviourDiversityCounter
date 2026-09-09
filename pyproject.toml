@@ -27,15 +27,16 @@ lark = "^1.1.9"
 numpy = ">=1.24"
 
 # Optional extras. The harness's own analysis is stdlib-only -- the Wilcoxon
-# test is written out in paperexps/stats.py rather than imported -- so a bare
-# compute node needs none of these.
+# test, Holm's correction and Kendall's tau are written out in
+# paperexps/stats.py rather than imported -- so a bare compute node needs none
+# of these.
 matplotlib = { version = "^3.6", optional = true }
 scipy = { version = "^1.10", optional = true }
 
 [tool.poetry.extras]
-# `bdcevalcli report`'s figures. `analyze`'s tables run on stdlib alone.
+# The figures of `runnner.py --report`. The CSVs and tables run on stdlib alone.
 plots = ["matplotlib"]
-# Only tests/test_stats.py wants scipy, to check the hand-written Wilcoxon
+# Only tests/test_harness.py wants scipy, to check the hand-written statistics
 # against it. The sweep itself never imports it.
 stats = ["scipy"]
 analysis = ["matplotlib", "scipy"]
@@ -53,7 +54,7 @@ up-fast-downward = "^0.4.1"
 pytest = ">=8.0"
 
 [tool.poetry.scripts]
-bdcevalcli = 'paperexps.cli:main'
+bdcevalcli = 'paperexps.runnner:main'
 
 [build-system]
 requires = ["poetry-core"]
@@ -61,6 +62,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# paper-experiments is on the path so the golden tests can reach the
-# plan-level baseline in paperexps/baseline.py.
-pythonpath = [".", "paper-experiments"]
+# paperexps is on the path so the tests can import the harness modules the
+# way the runner does (flat: `import stats`, `import baseline`).
+pythonpath = [".", "paper-experiments", "paper-experiments/paperexps"]

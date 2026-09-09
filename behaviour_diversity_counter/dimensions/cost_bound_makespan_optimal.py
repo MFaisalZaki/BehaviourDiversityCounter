@@ -1,25 +1,34 @@
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension
+from fractions import Fraction
+
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight
+from behaviour_diversity_counter.simulation import plan_cost
+
 
 class MakespanOptimalCostDimension(BehaviourDimension):
-    def __init__(self, task, addinfo):
-        super().__init__(task, 'cb', addinfo, addinfo.get('weight', 1.0))
+    """``cb``: the plan's cost, in the paper's sense of Def. plan -- the sum of
+    its action costs. Under a task without a cost metric every action costs
+    one, and the value is the plan length.
+    """
+
+    def __init__(self, task, addinfo=None):
+        super().__init__(task, 'cb', addinfo, declared_weight(addinfo))
 
     def plan_behaviour(self, plan):
-        self.domain.add(len(plan.actions))
-        return f'{self.name}:' + str(len(plan.actions))
+        # The counter attaches the cost it accumulated while simulating; a
+        # dimension used on its own replays the plan to get it.
+        cost = getattr(plan, 'cost', None)
+        if cost is None:
+            cost = plan_cost(self.task, plan)
+        self.domain.add(cost)
+        return f'{self.name}:{cost}'
 
-    def _cost(self, plan):
-        # Match on the token prefix, not a substring: other dimensions' tokens may
-        # contain this dimension's name inside predicate/object names.
-        token = next(filter(lambda e: e.strip().startswith(self.name + ':'), plan.split('$$')), None)
-        assert token is not None, 'The dimension value should be present in the plan behaviour.'
-        return int(token.strip().replace(self.name + ':', '').strip())
+    def _cost(self, behaviour):
+        return Fraction(self.payload(behaviour))
 
-    def distance(self, plan1, plan2):
-        # Takes behaviour strings, like every other dimension: this is what
-        # BehaviourDiversityCounter.b_maxsum passes in.
-        cost1, cost2 = self._cost(plan1), self._cost(plan2)
+    def distance(self, b1, b2):
+        cost1, cost2 = self._cost(b1), self._cost(b2)
         if max(cost1, cost2) == 0:
             return 0.0
-        # Normalised into [0, 1] so the score can be averaged with the other dimensions.
-        return self.weight * abs(cost1 - cost2) / max(cost1, cost2)
+        # 1 - min/max: a metric on the non-negative costs, in [0, 1], and zero
+        # exactly on equal costs, as Def. feature and Def. separable-distance ask.
+        return self.weight * float(abs(cost1 - cost2) / max(cost1, cost2))

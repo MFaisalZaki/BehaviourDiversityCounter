@@ -346,16 +346,44 @@ class TestBMaxSum:
 
         assert counter.b_maxsum([short, long]) == 0.5
 
-    def test_dimensions_without_a_distance_cannot_be_scored(
-        self, task, resource_file, plan_l1_then_l2, plan_two_trucks
+    def test_every_dimension_is_a_feature_with_a_distance(
+        self, task, resource_file, function_file, utility_goals,
+        plan_l1_then_l2, plan_two_trucks
     ):
-        """'rc', 'uv' and 'fn' have no distance(); the B-MaxSum metric is only
-        defined over the dimensions that implement one. The two plans must differ
-        under 'rc', or deduplication would leave no pair to measure."""
-        counter = BehaviourDiversityCounter(task, [('rc', resource_file)])
+        """Def. feature gives every dimension a per-dimension distance, so the
+        three distance-based indicators are defined over any dimension set.
+        tr1=4,tr2=0 against tr1=2,tr2=2 under rc: 1 - 2/6."""
+        counter = BehaviourDiversityCounter(
+            task, [('rc', resource_file), ('uv', utility_goals), ('fn', function_file)])
+        plans = [plan_l1_then_l2, plan_two_trucks]
 
-        with pytest.raises(AssertionError):
-            counter.b_maxsum([plan_l1_then_l2, plan_two_trucks])
+        assert counter.b_coverage(plans) == 2
+        assert counter.b_maxsum(plans) == pytest.approx((1 - 2 / 6) / 3)
+        assert counter.b_maxmin(plans) == counter.b_maxsum(plans)
+
+
+class TestExtractBCoverage:
+    """extract(plans, k) keeps, per behaviour, the cheapest plan exhibiting it
+    (sec. solving of the paper: as MAP-Elites keeps the fittest per cell)."""
+
+    def test_the_cheapest_plan_represents_its_behaviour(self, task, domain, make_plan, plan_l1_then_l2):
+        """A detour to l0 and back reaches the goals in the same order at cost
+        6; the four-action plan is the cheaper exemplar, wherever it sits."""
+        move, drop = domain['move'], domain['drop']
+        tr1, l0, l1, l2 = domain['tr1'], domain['l0'], domain['l1'], domain['l2']
+        detour = make_plan((move, (tr1, l0, l1)), (drop, (tr1, l1)), (move, (tr1, l1, l0)),
+                           (move, (tr1, l0, l1)), (move, (tr1, l1, l2)), (drop, (tr1, l2)))
+        counter = BehaviourDiversityCounter(task, [('go', None)])
+
+        assert counter.extract([detour, plan_l1_then_l2], k=1) == [plan_l1_then_l2]
+        assert counter.extract([plan_l1_then_l2, detour], k=1) == [plan_l1_then_l2]
+
+    def test_each_plan_is_annotated_with_its_cost(self, task, plan_l1_then_l2):
+        counter = BehaviourDiversityCounter(task, [('go', None)])
+
+        counter.b_coverage([plan_l1_then_l2])
+
+        assert plan_l1_then_l2.cost == 4
 
 
 class TestCaching:
