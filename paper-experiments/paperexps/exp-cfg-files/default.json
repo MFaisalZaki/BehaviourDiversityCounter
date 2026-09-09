@@ -46,53 +46,6 @@
     },
     "experiments": [
         {
-            "name": "GEN-fi-q2",
-            "kind": "generate",
-            "generator": "fi",
-            "tag": "fi-bc",
-            "q": 2.0,
-            "pool-k-values": [
-                5,
-                10,
-                100
-            ],
-            "pool-factor": 10,
-            "pool-cap": 1000,
-            "domains": [
-                "rovers",
-                "logistics",
-                "depot",
-                "driverlog",
-                "satellite",
-                "tpp",
-                "zenotravel",
-                "blocks",
-                "gripper",
-                "elevators",
-                "transport",
-                "floortile",
-                "nomystery",
-                "parking",
-                "scanalyzer",
-                "sokoban",
-                "visitall",
-                "woodworking"
-            ],
-            "time-limit": "30m",
-            "memory-limit": "8G",
-            "subprocess-timeout-s": 2100,
-            "fi-command": [
-                "python3",
-                "-m",
-                "forbiditerative.plan"
-            ],
-            "extra-args": [],
-            "plansdir": "sandbox/fi-generated-plans-dir",
-            "dump-dir": "sandbox/fi-generated-plans-dir",
-            "ru-info": "sandbox/ru-info-dir",
-            "benchmark": "sandbox/classical-domains"
-        },
-        {
             "name": "E0",
             "dump-dir": "sandbox/E0",
             "plansdir": "sandbox/fi-generated-plans-dir",

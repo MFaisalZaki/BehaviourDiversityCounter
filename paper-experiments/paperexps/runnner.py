@@ -5,7 +5,6 @@ its report from the tasks already run.
     python runnner.py --config-file ... --experiment-name E1 --task-id 1.0-10-classical-2002-rovers-1-fi-bc
     python runnner.py --config-file ... --experiment-name E1              # every task, resumable
     python runnner.py --config-file ... --experiment-name E1 --report     # CSVs, tables, figures, manifest
-    python runnner.py --config-file ... --experiment-name GEN-fi-q2       # generate pools (see gen_pools.py)
 
 A task is one pool file and writes one result file into the experiment's
 ``dump-dir``; ``--list-tasks`` prints ``task_id<TAB>dumpfile``, the manifest a
@@ -24,7 +23,6 @@ import exp_e3_greedy_vs_optimal
 import exp_e4_generators
 import exp_e5_runtime
 import exp_e6_sensitivity
-import gen_pools
 from harness import load_results, run_tasks
 from utils import create_dump_dir, dumpfile_name, filter_tasks, match_plans_with_problems, resolve
 
@@ -45,13 +43,7 @@ def load_config(path, name):
     return config, params
 
 
-def is_generation(params):
-    return params.get('kind') == 'generate'
-
-
 def experiment_tasks(params):
-    if is_generation(params):
-        return gen_pools, gen_pools.list_tasks(params)
     module = EXPERIMENTS[params['name']]
     tasks = match_plans_with_problems(params['plansdir'], params['benchmark'], params['ru-info'])
     tasks = filter_tasks(tasks, params)
@@ -64,7 +56,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run one experiment of the paper's evaluation.")
     parser.add_argument('--config-file', required=True, help='Path to the configuration file.')
     parser.add_argument('--experiment-name', required=True,
-                        help=f'One of {sorted(EXPERIMENTS)}, or a generation entry of the configuration.')
+                        help=f'One of {sorted(EXPERIMENTS)}.')
     parser.add_argument('--list-tasks', action='store_true',
                         help='Print "task_id<TAB>dumpfile" for every task and exit. '
                              'This is the manifest a slurm array indexes into.')
@@ -75,28 +67,12 @@ def main(argv=None):
                         help='Build the CSVs, tables, figures and manifest from the results on disk.')
     args = parser.parse_args(argv)
 
+    if args.experiment_name not in EXPERIMENTS:
+        raise SystemExit(f"unknown experiment '{args.experiment_name}'; one of {sorted(EXPERIMENTS)}")
     config, params = load_config(args.config_file, args.experiment_name)
-    if not is_generation(params) and params['name'] not in EXPERIMENTS:
-        raise SystemExit(f"unknown experiment '{args.experiment_name}'; one of {sorted(EXPERIMENTS)} "
-                         f"or an entry with \"kind\": \"generate\"")
+    module = EXPERIMENTS[params['name']]
     basedir = create_dump_dir(params['dump-dir'])
 
-    if is_generation(params):
-        module, tasks = experiment_tasks(params)
-        if args.report:
-            print(f"| {params['name']} is a generation sweep: its output is the pool files in {basedir}")
-            return
-        if args.list_tasks:
-            for t in tasks:
-                print(f"{t['task_id']}\t{t['dumpfile']}")
-            return
-        if args.task_id is not None:
-            tasks = [t for t in tasks if t['task_id'] == args.task_id]
-            assert tasks, f"no task with id '{args.task_id}' in this configuration"
-        gen_pools.run(tasks, basedir, params, force=args.force)
-        return
-
-    module = EXPERIMENTS[params['name']]
     if args.report:
         started = time.strftime('%Y-%m-%dT%H:%M:%S')
         paths = {key: resolve(params['output'][key]) for key in ('results', 'tables', 'figures')}
