@@ -47,12 +47,12 @@ def run_task(taskdetails, params):
         counter.behaviours(plans)
         selected, timing = select_all(counter, plans, k, setting['k_nn'])
         for indicator in INDICATORS:
-            plans = selected[indicator]
-            own = scores(counter, plans, setting['k_nn'])
+            chosen = selected[indicator]   # never rebind ``plans``: it is the candidate pool of every setting
+            own = scores(counter, chosen, setting['k_nn'])
             # Behaviours under the *default* model, so sets are comparable
             # across bin widths, whose tokens differ.
-            under_default = behaviour_set([type('P', (), {'behaviour': b})() for b in default_counter._behaviours_of(plans)])
-            plan_ids = {plan.pool_index for plan in plans}
+            under_default = behaviour_set([type('P', (), {'behaviour': b})() for b in default_counter._behaviours_of(chosen)])
+            plan_ids = {plan.pool_index for plan in chosen}
             if parameter == 'default':
                 default_selection[indicator] = (under_default, plan_ids)
             reference = default_selection[indicator]

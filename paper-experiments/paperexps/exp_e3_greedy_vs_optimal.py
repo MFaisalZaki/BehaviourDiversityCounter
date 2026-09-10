@@ -117,7 +117,8 @@ def report(results, params, paths, config_file, started):
             ks = sorted({r['k'] for r in rows if r['indicator'] == indicator})
             data = [[r['ratio_exact_k'] for r in rows if r['indicator'] == indicator and r['k'] == k
                      and r['ratio_exact_k'] is not None] for k in ks]
-            ax.boxplot(data, labels=[str(k) for k in ks])
+            ax.boxplot(data)
+            ax.set_xticks(range(1, len(ks) + 1), [str(k) for k in ks])  # `labels=` vs `tick_labels=` across matplotlib versions
             ax.set_title(indicator)
             ax.set_xlabel('k')
         axes[0].set_ylabel('greedy / optimal')

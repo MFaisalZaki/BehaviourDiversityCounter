@@ -52,7 +52,7 @@ def fmt(value, digits=3):
         if abs(value) >= 1000 or (abs(value) < 0.001 and value != 0):
             return f'{value:.2e}'
         return f'{value:.{digits}f}'
-    return str(value).replace('_', r'\_')
+    return str(value).replace('_', r'\_').replace('$', r'\$')
 
 
 def latex_table(path, columns, rows, caption, label, digits=3, align=None):
