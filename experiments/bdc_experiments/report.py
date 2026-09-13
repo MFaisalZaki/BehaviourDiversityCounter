@@ -292,3 +292,43 @@ def setup_report(cfg):
         aligns='llll' + 'l' + 'r'))
     written.append(manifest(cfg, 'setup', written, []))
     return written
+
+
+def usable(results):
+    """The results a report may read numbers from: neither failed nor skipped."""
+    return [r for r in results
+            if not r.get('error') and not (r.get('extra') or {}).get('skipped')]
+
+
+def all_rows(results, **where):
+    """Every row of every usable result, optionally filtered on row fields."""
+    rows = [row for result in usable(results) for row in result.get('rows', [])]
+    for key, value in where.items():
+        rows = [row for row in rows if row.get(key) == value]
+    return rows
+
+
+def group(rows, keys):
+    """``tuple of key values -> rows``, in first-appearance order."""
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(tuple(row.get(key) for key in keys), []).append(row)
+    return grouped
+
+
+def summary_rows(rows, keys, value_key, extra=None):
+    """One summary row per group: n, median, IQR, and the pooled and macro means.
+
+    This is the shape every experiment's summary table wants, so that a table
+    can show both aggregations without each report rebuilding the arithmetic.
+    """
+    summaries = []
+    for values, members in group(rows, keys).items():
+        summary = dict(zip(keys, values))
+        summary.update(summarise([row.get(value_key) for row in members]))
+        summary['pooled_mean'] = pooled(members, value_key)
+        summary['macro_mean'] = macro(members, value_key)
+        if extra:
+            summary.update(extra(members))
+        summaries.append(summary)
+    return summaries

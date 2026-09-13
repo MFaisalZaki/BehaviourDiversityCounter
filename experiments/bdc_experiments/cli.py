@@ -3,7 +3,7 @@
 import argparse
 
 from bdc_experiments import benchmark, generate, pools, report, runner
-from bdc_experiments.config import load
+from bdc_experiments.config import load, snapshot
 
 
 def _common(parser):
@@ -33,6 +33,8 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     cfg = load(args.config, results_dir=args.results_dir)
+    if not getattr(args, 'list', False):
+        snapshot(cfg)
 
     if args.command == 'generate':
         instances = benchmark.instances(cfg) if benchmark.benchmark_dir(cfg).is_dir() \

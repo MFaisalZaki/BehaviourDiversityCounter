@@ -10,6 +10,7 @@ from fractions import Fraction
 from functools import lru_cache
 from pathlib import Path
 
+from unified_planning.exceptions import UPException
 from unified_planning.io import PDDLReader
 from unified_planning.shortcuts import SequentialSimulator
 
@@ -129,8 +130,13 @@ def load_pool(path, counter=None, task=None):
             else:
                 counter.b_coverage([plan])      # replays, caches, sets plan.cost
                 cost = plan.cost
-        except InapplicablePlanError as failure:
-            dropped_replay.append({'original_index': index, 'reason': str(failure)})
+        except (InapplicablePlanError, UPException) as failure:
+            # The library raises its own error when a step reaches no state;
+            # unified-planning raises UPInvalidActionError when the step cannot
+            # even be grounded. Both mean the same thing here: this plan has no
+            # behaviour, so it is dropped and listed rather than counted.
+            dropped_replay.append({'original_index': index,
+                                   'reason': f'{type(failure).__name__}: {failure}'})
             continue
         replayed.append((index, plan, cost))
     replay_s = time.perf_counter() - clock

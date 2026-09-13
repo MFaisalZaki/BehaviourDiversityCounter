@@ -207,3 +207,16 @@ def load_results(cfg, experiment):
 def load_dump(cfg, model_hash, domain, stem, pool_stem):
     path = (results_root(cfg) / 'behaviours' / model_hash / domain / stem / f'{pool_stem}.json')
     return json.loads(path.read_text()) if path.is_file() else None
+
+
+#: The nine fields every row of every experiment carries, so that the reports
+#: can group and pair on them without knowing which experiment wrote them.
+BASE_FIELDS = ('instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b')
+
+
+def base_row(loaded, dump, model_record, k=None, kappa=None):
+    """The nine mandatory fields, ready to be extended with the row's own."""
+    record = loaded['record']
+    return {'instance': record['instance'], 'domain': record['domain'], 'q': record['q'],
+            'N': record['requested'], 'model': model_record['name'], 'k': k, 'kappa': kappa,
+            'pool_size': record['size'], 'b': len(dump['distinct'])}

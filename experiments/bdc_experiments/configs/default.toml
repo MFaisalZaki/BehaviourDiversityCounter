@@ -7,7 +7,10 @@ seed = 20260913
 results_dir = "runs/default"
 time_limit_generation_s = 1800
 memory_limit_generation_mb = 8000
-time_limit_selection_s = 600
+# Phase two, per task. Generous because E6 remaps a 10,000-plan pool
+# `[e6].repeats` times over: a task that runs away is a recorded failure, and
+# this is the wall clock at which it becomes one.
+time_limit_selection_s = 3600
 
 [benchmark]
 source = "https://github.com/AI-Planning/classical-domains.git"
@@ -25,8 +28,12 @@ instances_per_domain = 15
 
 [generation]
 planner = "symk"
-modes = ["topq"]
-pool_sizes = [1000]
+modes = ["topq"]                        # "topk" is the alternative; both doubles the cost
+# N: plans requested per pool. E6 times the second phase against the pool size,
+# so its three sizes are generated here and the other experiments then run over
+# all three. Cutting this to [1000] cuts the sweep roughly threefold and leaves
+# E6 with a single point.
+pool_sizes = [100, 1000, 10000]
 q_values = [1.0, 2.0]
 
 [selection]

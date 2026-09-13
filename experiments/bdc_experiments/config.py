@@ -115,3 +115,17 @@ def _validate(cfg, source):
 def results_root(cfg):
     """Everything the sweep writes goes under here."""
     return Path(cfg['run']['results_dir']).expanduser()
+
+
+def snapshot(cfg):
+    """Copy the config as run into the run directory.
+
+    The run directory is the artefact that ships with the paper, so it carries
+    the configuration it was produced from; the hash in every manifest ties the
+    two together.
+    """
+    root = results_root(cfg)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / 'config.toml'
+    path.write_bytes(Path(cfg['meta']['config_path']).read_bytes())
+    return path
