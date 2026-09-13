@@ -43,7 +43,16 @@ DEFAULT_K_NN = 3
 #: that decide the pick is reproducible but not stable: an unrelated change to
 #: how a score is accumulated, or a different numpy, silently returns a
 #: different selection.
-TIE_DECIMALS = 3
+#:
+#: Nine decimals rather than three. The noise being absorbed is of order 1e-15;
+#: three decimals declared two candidates tied whenever they came within 5e-4 of
+#: each other, which let the greedy take a plan that is not the maximiser the
+#: paper's rule names -- the Phase 0 audit found such a case in a random
+#: behaviour space, where the greedy gave away 8.8e-05 of B-MaxSum. On the
+#: benchmark's own spaces, whose dissimilarities are rationals with small
+#: denominators, the two settings select identically (648 selections compared,
+#: none changed); see docs/AUDIT.md.
+TIE_DECIMALS = 9
 
 
 def best_index(scores):

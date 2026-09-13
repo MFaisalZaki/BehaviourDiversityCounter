@@ -172,6 +172,9 @@ def build_counter(spec, task, instance_info, trace_cache=None):
                     / f"{instance_info['id'].replace('/', '__')}-{'_'.join(types)}.txt")
             addinfo['file'] = str(write_resource_file(path, objects))
         if feature.key == 'cbin':
+            if instance_info['optimal_cost'] is None:
+                raise ValueError(f"model {spec.name}: instance {instance_info.get('id')} has no "
+                                 f'optimal cost recorded, so the cost bin has no c* to divide by')
             addinfo['optimal-cost'] = instance_info['optimal_cost']
             addinfo['q'] = instance_info['q']
         dimensions.append((feature.key, addinfo))

@@ -12,6 +12,18 @@ of the order the behaviours happen to arrive in.
 import math
 from itertools import combinations
 
+#: Two scores this close are the same number. Candidates equal in exact
+#: arithmetic are accumulated from different floats and come out a few ulps
+#: apart; the rule is then to break the tie by the lowest index, not by
+#: whichever rounding error happened to be the larger. Far above that noise
+#: (~1e-15) and far below any dissimilarity the models produce.
+TIE_TOLERANCE = 1e-9
+
+
+def _better(value, best):
+    """Whether ``value`` beats ``best`` by more than the tie tolerance."""
+    return best is None or value > best + TIE_TOLERANCE
+
 
 def ref_distinct(behaviours):
     """B_M(Psi): the distinct behaviours, in first-occurrence order."""
@@ -83,7 +95,7 @@ def ref_optimum(behaviours, d, k, indicator, kappa=None):
     best_value, best_subset = None, None
     for subset in combinations(range(len(u)), k):
         value = ref_indicator(indicator, [u[i] for i in subset], d, kappa)
-        if best_value is None or value > best_value:
+        if _better(value, best_value):
             best_value, best_subset = value, subset
     return (best_value, best_subset)
 
@@ -96,7 +108,7 @@ def ref_optimum_at_most(behaviours, d, k, indicator, kappa=None):
     for size in range(1, min(k, len(u)) + 1):
         for subset in combinations(range(len(u)), size):
             value = ref_indicator(indicator, [u[i] for i in subset], d, kappa)
-            if best_value is None or value > best_value:
+            if _better(value, best_value):
                 best_value, best_subset = value, subset
     return (best_value, best_subset)
 
@@ -121,7 +133,7 @@ def _open(plans, d, k):
     best_value, best_pair = None, None
     for i, j in combinations(range(n), 2):
         value = d(plans[i][2], plans[j][2])
-        if best_value is None or value > best_value:
+        if _better(value, best_value):
             best_value, best_pair = value, [i, j]
     return best_pair
 
@@ -139,7 +151,7 @@ def _greedy(plans, d, k, score):
             value = score(pos, held)
             if value is None:
                 continue
-            if best_value is None or value > best_value:
+            if _better(value, best_value):
                 best_value, best_pos = value, pos
         if best_pos is None:
             break

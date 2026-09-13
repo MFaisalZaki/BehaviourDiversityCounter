@@ -21,6 +21,11 @@ MODULES = {'e1': 'e1_case_study', 'e2': 'e2_separation', 'e3': 'e3_greedy_vs_opt
 INDICATORS = ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty')
 
 
+class SkipTask(Exception):
+    """A task with nothing to do. Recorded as skipped with its reason, which is
+    not the same thing as a failure and not the same thing as a zero."""
+
+
 def module(experiment):
     if experiment not in MODULES:
         raise ValueError(f"unknown experiment '{experiment}'; valid: {sorted(MODULES)}")
@@ -81,6 +86,10 @@ def instance_info(cfg, pool):
 def setup(cfg, ctx, spec, trace_cache=None, loaded=None):
     """Task, counter, cost-sorted pool, model record and behaviour dump."""
     pool = pools.read_pool(ctx['pool_path'])
+    if not pool['plans']:
+        raise SkipTask(f"the pool holds no plans"
+                       f"{' (the planner timed out)' if pool.get('timed_out') else ''}, "
+                       f'so there is nothing to select from')
     task = pools.task_of(pool)
     counter = models.build_counter(spec, task, instance_info(cfg, pool), trace_cache=trace_cache)
     if loaded is None:
@@ -162,6 +171,8 @@ def run_task(cfg, experiment, task_id, force=False):
     try:
         with time_limit(cfg['run']['time_limit_selection_s']):
             result.update(module(experiment).run_task(task_id, cfg))
+    except SkipTask as nothing:
+        result['extra'] = dict(result['extra'], skipped=str(nothing))
     except Exception as failure:
         result['error'] = {'type': type(failure).__name__, 'message': str(failure),
                            'traceback': traceback.format_exc()}
