@@ -234,6 +234,30 @@ sweep, so the guarantee is enforced rather than asserted in prose.
 `manifest.json`, which records when it was written and the revision it was
 written from; `tests/experiments/test_experiments_smoke.py` checks the rest.
 
+## Size of the package
+
+The brief budgets "about 1500 lines of code in `experiments/`, excluding tests
+and configs", and says that a feature which pushes past it should be left out
+and the omission recorded here. Nothing was left out: every output named in the
+plan's mapping to the paper's Section 5 is produced, and dropping one would
+break an `\input` in the paper. The package is therefore over budget, and this
+is where the lines went:
+
+| Part | Code lines |
+|---|---|
+| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`) | about 1060 |
+| `reference.py` (the Phase 0 arbiter) | about 145 |
+| The six experiments | about 1230 |
+
+Counting non-blank, non-comment, non-docstring lines. The six experiments
+average a little over 200 lines each, and each writes between five and seven
+files: a raw dump the reader can recompute from, one or two CSVs, a LaTeX
+table, one or two figures and a manifest. What was actually shared rather than
+repeated is in `runner.py` (the task grid, the standard setup, timed selection,
+the selection record, the nine mandatory row fields) and in `report.py` (CSV,
+booktabs, Holm, the two scipy tests, the pooled-and-macro summary rows,
+figures, the manifest).
+
 ## Known limits
 
 * `[generation].pool_sizes` in `default.toml` is `[100, 1000, 10000]` because

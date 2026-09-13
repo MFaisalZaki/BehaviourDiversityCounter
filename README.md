@@ -364,7 +364,27 @@ tests/test_parsers.py     the (:resource ...) / (:function ...) declaration pars
 tests/test_dimensions.py  each dimension: tokens and distances
 tests/test_counter.py     the indicators and extract over the transport task, and edge cases
 tests/test_golden.py      the paper's worked examples and selection conventions, on a stub
+tests/experiments/        the evaluation: the Phase 0 audit and the smoke sweep
 ```
 
 The expected strings are worked out by hand from the fixture task rather than recorded from
 the code, so a change in what a dimension *means* shows up as a failure.
+
+## The paper's evaluation
+
+The empirical evaluation lives in `experiments/` as the package `bdc_experiments`, with its
+own CLI: `bdcexp generate | run | report` builds pools of plans with SymK over the
+`classical-domains` benchmark, runs the six experiments of the paper's Section 5 over them,
+and writes the CSVs, LaTeX tables and figures those subsections consume. Everything it
+produces goes under one `runs/<name>/` directory, which is the artefact that ships with the
+paper: the pools with their plans, a behaviour dump per model and pool holding every
+behaviour and the full dissimilarity matrix, one raw result file per task, and reports that
+are a pure function of those two. [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) is how to run
+it and what every output means.
+
+Before any experiment was allowed to depend on this library, it was audited against an
+independently written reference implementation of the paper's definitions. That audit found
+one real defect — greedy selection could add a plan that is not the maximiser, because
+candidate scores were rounded too coarsely before the argmax — and
+[`docs/AUDIT.md`](docs/AUDIT.md) records every check, the fix, and the mutation testing that
+shows the audit can actually fail.
