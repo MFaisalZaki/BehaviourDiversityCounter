@@ -206,3 +206,6 @@ paper-experiments/data/fi-generated-plans-dir/
 paper-experiments/data/classical-domains/
 benchmark-run*/
 benchmark-run.zip
+# Sweep output: `runs/<name>/` is generated, and is the artefact that ships
+# with the paper rather than something the repository carries.
+runs/

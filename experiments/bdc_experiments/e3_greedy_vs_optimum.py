@@ -267,7 +267,8 @@ def report(cfg, results):
     path.write_text(json.dumps(checks, indent=1))
     written.append(path)
     written.append(rp.manifest(cfg, 'e3', written, results, extra={
-        'bcoverage_check': 'PASS' if checks['passed'] else 'FAIL',
+        'bcoverage_check': (('PASS' if checks['passed'] else 'FAIL') if checks['cases']
+                            else 'no B-Coverage case was enumerated'),
         'bcoverage_violations': checks['violations'],
         'bcoverage_cases': checks['cases'],
         'behaviour_range': cfg['e3']['behaviour_range'],

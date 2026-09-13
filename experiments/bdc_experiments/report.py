@@ -174,7 +174,10 @@ def save(fig, path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(path)
+    # No creation date in the PDF: `bdcexp report` has to rebuild the whole of
+    # reports/ byte for byte from the dumps, and a timestamp inside a figure
+    # would make every rebuild look like a change.
+    fig.savefig(path, metadata={'CreationDate': None})
     import matplotlib.pyplot as plt
     plt.close(fig)
     return path
