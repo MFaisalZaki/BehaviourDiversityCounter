@@ -1,0 +1,539 @@
+{
+ "schema": "pool",
+ "version": 1,
+ "instance": "driverlog/2002/pfile3",
+ "domain": "driverlog",
+ "ipc": "2002",
+ "domain_file": "../../../pddl/driverlog/domain.pddl",
+ "problem_file": "../../../pddl/driverlog/pfile3.pddl",
+ "planner": {
+  "name": "symk",
+  "version": "1.6.0",
+  "search": "symq_bd(plan_selection=top_k(num_plans=30,dump_plans=false),quality=2.0)",
+  "exit_code": 0,
+  "stdout_tail": "(trimmed for the committed smoke pool)"
+ },
+ "mode": "topq",
+ "q": 2.0,
+ "requested": 30,
+ "optimal_cost": 12,
+ "optimal_cost_source": "symk first plan of a top-quality pool (optimal)",
+ "started": "2026-09-13T22:46:54.739654+00:00",
+ "wall_s": 2.0561589880001065,
+ "cpu_s": 0.006550488000000243,
+ "timed_out": false,
+ "exhausted": false,
+ "duplicates_dropped": 0,
+ "plans": [
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(load-truck package3 truck1 s1)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(load-truck package3 truck1 s1)",
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)",
+    "(walk driver2 p2-0 s2)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(unload-truck package3 truck1 s2)",
+    "(walk driver2 p2-0 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package1 truck1 s1)",
+    "(unload-truck package2 truck1 s1)"
+   ],
+   "cost": 12
+  },
+  {
+   "actions": [
+    "(walk driver2 s0 p2-0)",
+    "(board-truck driver1 truck1 s1)",
+    "(load-truck package3 truck1 s1)",
+    "(drive-truck truck1 s1 s0 driver1)",
+    "(load-truck package2 truck1 s0)",
+    "(load-truck package1 truck1 s0)",
+    "(drive-truck truck1 s0 s2 driver1)",
+    "(walk driver2 p2-0 s2)",
+    "(unload-truck package3 truck1 s2)",
+    "(drive-truck truck1 s2 s1 driver1)",
+    "(unload-truck package2 truck1 s1)",
+    "(unload-truck package1 truck1 s1)"
+   ],
+   "cost": 12
+  }
+ ]
+}

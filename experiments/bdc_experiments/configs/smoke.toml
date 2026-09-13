@@ -1,0 +1,56 @@
+# The smoke sweep: the committed pools under configs/smoke_pools/, seconds to
+# run, no planner and no benchmark checkout. Used by the tests and by CI.
+# `bdcexp run smoke <experiment>` picks this file up by name.
+
+[run]
+seed = 20260913
+results_dir = "runs/smoke"
+time_limit_generation_s = 60
+memory_limit_generation_mb = 4000
+time_limit_selection_s = 60
+
+[benchmark]
+source = "https://github.com/AI-Planning/classical-domains.git"
+commit = "4bd0b42d89ea02bd38af6f93cf20a0ab0cbda9d9"
+domains = ["rovers", "driverlog", "satellite"]
+instances_per_domain = 1
+
+[generation]
+planner = "symk"
+modes = ["topq"]
+pool_sizes = [30]
+q_values = [1.0, 2.0]
+
+[selection]
+k_values = [3, 5]
+kappa_values = [1, 2]
+
+[models]
+generic = { features = ["goal_order", "cost_bin"], goal_cap = 3, cost_bin_width = 0.25 }
+
+[e1]
+domain = "rovers"
+q = 2.0
+min_behaviours = 4
+k = 3
+kappa = 1
+
+[e2]
+subsets = 25
+
+[e3]
+k_values = [2, 3]
+behaviour_range = [3, 12]
+
+[e4]
+k_range = [2, 6]
+
+[e5]
+goal_caps = [2, 3]
+cost_bin_widths = [0.25, 0.5]
+k = 3
+
+[e6]
+pool_sizes = [30]
+repeats = 2
+feature_counts = [1, 2]

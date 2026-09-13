@@ -1,0 +1,467 @@
+{
+ "schema": "pool",
+ "version": 1,
+ "instance": "satellite/2004/p01-pfile1",
+ "domain": "satellite",
+ "ipc": "2004",
+ "domain_file": "../../../pddl/satellite/domain.pddl",
+ "problem_file": "../../../pddl/satellite/p01-pfile1.pddl",
+ "planner": {
+  "name": "symk",
+  "version": "1.6.0",
+  "search": "symq_bd(plan_selection=top_k(num_plans=30,dump_plans=false),quality=2.0)",
+  "exit_code": 0,
+  "stdout_tail": "(trimmed for the committed smoke pool)"
+ },
+ "mode": "topq",
+ "q": 2.0,
+ "requested": 30,
+ "optimal_cost": 9,
+ "optimal_cost_source": "symk first plan of a top-quality pool (optimal)",
+ "started": "2026-09-13T22:46:58.063680+00:00",
+ "wall_s": 0.45389421000004404,
+ "cpu_s": 0.005776722000000234,
+ "timed_out": false,
+ "exhausted": false,
+ "duplicates_dropped": 0,
+ "plans": [
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(switch_on instrument0 satellite0)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 9
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation1 phenomenon6)",
+    "(turn_to satellite0 groundstation2 groundstation1)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(turn_to satellite0 groundstation2 star5)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon4 groundstation2)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon4)",
+    "(take_image satellite0 star5 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 phenomenon6 groundstation2)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 star5 phenomenon6)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 star5)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 phenomenon4)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  },
+  {
+   "actions": [
+    "(switch_on instrument0 satellite0)",
+    "(turn_to satellite0 groundstation2 phenomenon6)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(calibrate satellite0 instrument0 groundstation2)",
+    "(turn_to satellite0 star5 groundstation2)",
+    "(take_image satellite0 star5 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon6 star5)",
+    "(take_image satellite0 phenomenon6 instrument0 thermograph0)",
+    "(turn_to satellite0 phenomenon4 phenomenon6)",
+    "(take_image satellite0 phenomenon4 instrument0 thermograph0)"
+   ],
+   "cost": 10
+  }
+ ]
+}

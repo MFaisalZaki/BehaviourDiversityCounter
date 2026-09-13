@@ -1,0 +1,419 @@
+{
+ "schema": "pool",
+ "version": 1,
+ "instance": "rovers/2006/p02",
+ "domain": "rovers",
+ "ipc": "2006",
+ "domain_file": "../../../pddl/rovers/domain.pddl",
+ "problem_file": "../../../pddl/rovers/p02.pddl",
+ "planner": {
+  "name": "symk",
+  "version": "1.6.0",
+  "search": "symq_bd(plan_selection=top_k(num_plans=30,dump_plans=false),quality=2.0)",
+  "exit_code": 0,
+  "stdout_tail": "(trimmed for the committed smoke pool)"
+ },
+ "mode": "topq",
+ "q": 2.0,
+ "requested": 30,
+ "optimal_cost": 8,
+ "optimal_cost_source": "symk first plan of a top-quality pool (optimal)",
+ "started": "2026-09-13T22:46:42.597228+00:00",
+ "wall_s": 0.37765436200015756,
+ "cpu_s": 0.008104084999999817,
+ "timed_out": false,
+ "exhausted": false,
+ "duplicates_dropped": 0,
+ "plans": [
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(drop rover0 rover0store)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  },
+  {
+   "actions": [
+    "(calibrate rover0 camera0 objective0 waypoint0)",
+    "(sample_rock rover0 rover0store waypoint0)",
+    "(drop rover0 rover0store)",
+    "(take_image rover0 waypoint0 objective1 camera0 low_res)",
+    "(communicate_image_data rover0 general objective1 low_res waypoint0 waypoint1)",
+    "(sample_soil rover0 rover0store waypoint0)",
+    "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
+    "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
+   ],
+   "cost": 8
+  }
+ ]
+}

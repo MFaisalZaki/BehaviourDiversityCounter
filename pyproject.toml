@@ -11,6 +11,8 @@ packages = [
     # `bdcevalcli` is on the PATH of the venv setup_benchmark.sh builds, and so
     # a compute node runs the same code the sweep was generated from.
     { include = "paperexps", from = "paper-experiments" },
+    # The evaluation of the paper's revision: one flat package, its own CLI.
+    { include = "bdc_experiments", from = "experiments" },
 ]
 
 [tool.poetry.dependencies]
@@ -32,6 +34,8 @@ numpy = ">=1.24"
 # of these.
 matplotlib = { version = "^3.6", optional = true }
 scipy = { version = "^1.10", optional = true }
+# `bdc_experiments` reports only: the run stage is stdlib plus the library.
+pandas = { version = "^2.0", optional = true }
 
 [tool.poetry.extras]
 # The figures of `runnner.py --report`. The CSVs and tables run on stdlib alone.
@@ -39,7 +43,7 @@ plots = ["matplotlib"]
 # Only tests/test_harness.py wants scipy, to check the hand-written statistics
 # against it. The sweep itself never imports it.
 stats = ["scipy"]
-analysis = ["matplotlib", "scipy"]
+analysis = ["matplotlib", "scipy", "pandas"]
 
 # Planner engines. Not imported by this package -- it consumes plans rather than
 # producing them -- so they are optional: `poetry install --with planners`.
@@ -55,6 +59,7 @@ pytest = ">=8.0"
 
 [tool.poetry.scripts]
 bdcevalcli = 'paperexps.runnner:main'
+bdcexp = 'bdc_experiments.cli:main'
 
 [build-system]
 requires = ["poetry-core"]
@@ -64,4 +69,4 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 # paperexps is on the path so the tests can import the harness modules the
 # way the runner does (flat: `import stats`, `import baseline`).
-pythonpath = [".", "paper-experiments", "paper-experiments/paperexps"]
+pythonpath = [".", "experiments", "paper-experiments", "paper-experiments/paperexps"]
