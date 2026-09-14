@@ -184,6 +184,16 @@ class TestDeclaredWeights:
 
         assert counter.b_maxsum([plan_l1_then_l2, plan_l2_then_l1]) == pytest.approx(0.5)
 
+    def test_declared_weights_must_sum_to_one(self, task):
+        """Def. diversity-model: the weights of a model sum to one."""
+        with pytest.raises(ValueError, match='sum to one'):
+            BehaviourDiversityCounter(task, [('go', {'weight': 0.5}), ('cb', {'weight': 0.75})])
+
+    def test_a_declared_weight_lies_in_the_unit_interval(self, task):
+        """Def. feature: a weight lies in (0, 1]."""
+        with pytest.raises(ValueError, match=r'\(0, 1\]'):
+            BehaviourDiversityCounter(task, [('go', {'weight': 1.5}), ('cb', {'weight': -0.5})])
+
 
 class TestExtractBMaxSum:
     """extract(plans, k, indicator='bmaxsum') -- the greedy extraction: repeatedly
@@ -324,7 +334,7 @@ class TestBMaxSum:
     def test_b_maxsum_works_with_the_cost_bound_dimension(
         self, task, plan_l1_then_l2, plan_l2_then_l1
     ):
-        """Regression: 'cb' raised AttributeError because its distance() expected plan
+        """Regression: 'cb' raised AttributeError because its dissimilarity() expected plan
         objects while b_maxsum passes behaviour strings.
 
         Both plans are 4 actions long, so cb contributes 0.0 and go contributes 1.0.
@@ -364,7 +374,7 @@ class TestBMaxSum:
 
 class TestExtractBCoverage:
     """extract(plans, k) keeps, per behaviour, the cheapest plan exhibiting it
-    (sec. solving of the paper: as MAP-Elites keeps the fittest per cell)."""
+    (Alg. extract-bc: as MAP-Elites keeps the fittest per cell)."""
 
     def test_the_cheapest_plan_represents_its_behaviour(self, task, domain, make_plan, plan_l1_then_l2):
         """A detour to l0 and back reaches the goals in the same order at cost
@@ -405,8 +415,8 @@ class TestCaching:
         counter = BehaviourDiversityCounter(task, [('go', None)])
         calls = []
         dimension = counter.dimensions['go']
-        original = dimension.distance
-        dimension.distance = lambda b1, b2: (calls.append((b1, b2)), original(b1, b2))[1]
+        original = dimension.dissimilarity
+        dimension.dissimilarity = lambda b1, b2: (calls.append((b1, b2)), original(b1, b2))[1]
         plans = [plan_l1_then_l2, plan_l2_then_l1]
 
         counter.b_maxsum(plans)

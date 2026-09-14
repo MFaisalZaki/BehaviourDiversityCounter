@@ -15,7 +15,7 @@ class UtilityValueDimension(BehaviourDimension):
     def __init__(self, task, addinfo):
         super().__init__(task, 'utility_value', addinfo, declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         achieved_utilities = defaultdict(list)
         _acheived_utilities = defaultdict(list)
         for state in plan.states:
@@ -32,7 +32,7 @@ class UtilityValueDimension(BehaviourDimension):
         _, _, assignments = self.payload(behaviour).partition(' -- ')
         return {goal: Fraction(value) for goal, value in _ASSIGNMENT.findall(assignments)}
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         # Weighted Jaccard distance over the achieved utilities: the utility of
         # the goals both plans achieve against that of the goals either does,
         # 1 - sum_g min(u_g, u'_g) / sum_g max(u_g, u'_g). A metric in [0, 1],

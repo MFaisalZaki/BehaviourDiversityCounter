@@ -118,14 +118,14 @@ def indicators(counter, plans, kappa):
     return {'bcoverage': float(counter.b_coverage(plans)),
             'bmaxsum': float(counter.b_maxsum(plans)),
             'bmaxmin': float(counter.b_maxmin(plans)),
-            'bnovelty': float(counter.b_novelty(plans, k_nn=kappa))}
+            'bnovelty': float(counter.b_novelty(plans, kappa=kappa))}
 
 
 def select(counter, plans, k, indicator, kappa):
     """``(selected, wall_s, cpu_s)``. kappa is always passed: the library's
-    DEFAULT_K_NN is never what an experiment means."""
+    DEFAULT_KAPPA is never what an experiment means."""
     wall, cpu = time.perf_counter(), time.process_time()
-    selected = counter.extract(plans, k, indicator=indicator, k_nn=kappa)
+    selected = counter.extract(plans, k, indicator=indicator, kappa=kappa)
     return selected, time.perf_counter() - wall, time.process_time() - cpu
 
 

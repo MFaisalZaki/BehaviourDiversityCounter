@@ -181,7 +181,7 @@ def payloads(behaviour):
 
 def model_distance(counter, b1, b2):
     """psi_M(a, b) = sum_i w_i psi_i, summed over the counter's own features."""
-    return sum(dimension.distance(b1, b2) for dimension in counter.dimensions.values())
+    return sum(dimension.dissimilarity(b1, b2) for dimension in counter.dimensions.values())
 
 
 def pool_path(cfg, domain, stem, pool_stem):

@@ -31,7 +31,7 @@ class CostBinDimension(BehaviourDimension):
         index = int((ratio - 1) // self.width)
         return min(max(index, 0), self.bins - 1)
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         cost = getattr(plan, 'cost', None)
         if cost is None:
             cost = plan_cost(self.task, plan)
@@ -39,7 +39,7 @@ class CostBinDimension(BehaviourDimension):
         self.domain.add(index)
         return f'{self.name}:{index}'
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         if self.bins < 2:
             return 0.0
         return self.weight * abs(int(self.payload(b1)) - int(self.payload(b2))) / (self.bins - 1)

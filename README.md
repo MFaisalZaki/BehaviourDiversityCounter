@@ -18,8 +18,8 @@ computed over the **distinct** behaviours, so a duplicate plan changes none of t
 - `b_maxmin(plans)` — B-MaxMin: the smallest pairwise distance. Fewer than two
   distinct behaviours score `0`, not `+inf`: a set offering the user no alternative
   should rank lowest, not highest.
-- `b_novelty(plans, k_nn=3)` — B-Novelty: the mean, over the distinct behaviours, of
-  each behaviour's mean distance to its `k' = min(k_nn, b - 1)` nearest neighbours.
+- `b_novelty(plans, kappa=3)` — B-Novelty: the mean, over the distinct behaviours, of
+  each behaviour's mean distance to its `k' = min(kappa, b - 1)` nearest neighbours.
   Also `0` below two behaviours.
 - `extract(plans, k, indicator=...)` — select `k` plans maximising one of them:
   `'bcoverage'` (default), `'bmaxsum'`, `'bmaxmin'` or `'bnovelty'` — see Extracting
@@ -130,7 +130,7 @@ its rover example (`1/2`, `1/2`). Under uniform weights the behaviour distance i
 mean of the per-dimension distances and lies in `[0, 1]`; under declared weights it lies
 in `[0, Σᵢ wᵢ]`.
 
-Each dimension **holds and applies** its own weight inside `distance()`, so the counter
+Each dimension **holds and applies** its own weight inside `dissimilarity()`, so the counter
 only sums what the dimensions hand it; the counter decides the values, since every rule
 about them is a rule about the whole set.
 
@@ -183,7 +183,7 @@ go:delivered(l1)->delivered(l2) $$ cb:4 $$ ru:tr1
 └──────── one token per dimension, joined with ' $$ ' ────────┘
 ```
 
-Each `distance()` locates its own token by splitting on `$$` and matching its `name:`
+Each `dissimilarity()` locates its own token by splitting on `$$` and matching its `name:`
 prefix — prefix, not substring, because a name like `ru` occurs inside object names such as
 `truck1`.
 
@@ -204,37 +204,37 @@ by `min`, `max` and `delta`; names may be parenthesised (`fuel(tr1)`).
 For `fn`, `delta` is the bin width: a value is reported as the index of the bin it lands
 in, so `fuel = 80` over `0..100` step `10` becomes bin `8`.
 
-## The behaviour distance
+## The model's dissimilarity
 
-Every indicator but `b_coverage` is built on one pairwise distance between behaviours,
-the paper's separable
+Every indicator but `b_coverage` is built on one pairwise dissimilarity between
+behaviours, the diversity model's (Def. diversity-model)
 
-    d(b, b') = Σᵢ wᵢ · dᵢ(bᵢ, b'ᵢ)
+    ψ_M(b, b') = Σᵢ wᵢ · ψᵢ(bᵢ, b'ᵢ)
 
 with the weights defaulting to `1/n`, under which it is the mean of the per-dimension
-`distance()` values and each pair scores in `[0, 1]`.
+`dissimilarity()` values and each pair scores in `[0, 1]`.
 
 `b_maxsum(plans)` discards duplicate behaviours, then sums that distance over every
 unordered pair of the distinct behaviours that remain. It is a sum over pairs, not an
 average, so it grows with the number of distinct behaviours and can exceed `1`. Fewer
 than two distinct behaviours score `0.0`, as they do under `b_maxmin` and `b_novelty`.
 
-**On `k_nn = 3`.** Novelty search uses 15 and NSLC 20, but those count neighbours in a
+**On `kappa = 3`.** Novelty search uses 15 and NSLC 20, but those count neighbours in a
 population and archive of thousands. Here the neighbours come from the distinct
-behaviours of one pool — tens — and `k_nn` is clamped to `b - 1`. Measured over random
-pools, `k_nn = 15` makes B-Novelty *exactly* the mean pairwise distance (B-MaxSum over
-`C(b, 2)`) for **100%** of pools with 16 or fewer behaviours; `k_nn = 3` never does above
+behaviours of one pool — tens — and `kappa` is clamped to `b - 1`. Measured over random
+pools, `kappa = 15` makes B-Novelty *exactly* the mean pairwise distance (B-MaxSum over
+`C(b, 2)`) for **100%** of pools with 16 or fewer behaviours; `kappa = 3` never does above
 four. Above the clamp the choice barely matters — at `b = 40` the overlap between the
-B-Novelty and B-MaxSum selections is ~0.15 whether `k_nn` is 1, 3, 15 or 20 — so the only
+B-Novelty and B-MaxSum selections is ~0.15 whether `kappa` is 1, 3, 15 or 20 — so the only
 thing the field's value would buy here is a second name for B-MaxSum on small pools.
 
-Every dimension implements `distance()`, normalised into `[0, 1]` before its weight as the
+Every dimension implements `dissimilarity()`, normalised into `[0, 1]` before its weight as the
 paper's definition of a feature requires, so the weights are the only place one dimension
 counts for more than another. Each is definite (zero exactly on equal values) and a
 metric, so the definiteness assumption the paper's twinning theorem rests on holds for
 any combination of them:
 
-| dimension | distance |
+| dimension | dissimilarity |
 | --- | --- |
 | `go` | Hamming over the two orderings, divided by the number of goals |
 | `stability` | the literature's model as one feature: the behaviour is the plan's action set and the distance is `1 - Jaccard` over two such sets (the stability distance of Srivastava et al.) |
@@ -246,7 +246,7 @@ any combination of them:
 
 ## Extracting diverse subsets
 
-`extract(plans, k, indicator=..., k_nn=3)` selects `k` plans from the given pool,
+`extract(plans, k, indicator=..., kappa=3)` selects `k` plans from the given pool,
 maximising the chosen indicator. It is the selection phase of the paper's two-phase
 scheme: the pool comes from any planner that returns cost-bounded plans, and one pool
 serves every indicator. `k` plans come back whenever the pool holds that many.
@@ -326,7 +326,7 @@ failure there means the library and the paper have parted company.
 
 ### Fixed
 
-- **Three dimensions were not features.** `rc`, `uv` and `fn` had no `distance()`, so
+- **Three dimensions were not features.** `rc`, `uv` and `fn` had no `dissimilarity()`, so
   every indicator but B-Coverage raised on them. Each now has a definite metric in
   `[0, 1]` (see the distance table).
 - **`fn` dropped its top bin.** Bins came from `range(min, max - delta, delta)`, so the
@@ -336,9 +336,9 @@ failure there means the library and the paper have parted company.
 - **Weights defaulted to `1.0` each**, so the behaviour distance ranged over `[0, n]`;
   the uniform `1/n` of the paper's example is the default again.
 - **`fn` was unusable.** Its parser inverted `min` and `max` against the grammar order,
-  crashing `plan_behaviour` with `IndexError`; and `plan_behaviour` returned
+  crashing `extract` with `IndexError`; and `extract` returned
   `','.join(val)` over an already-joined string, yielding `'f,u,e,l,:,8'` for `'fuel:8'`.
-- **B-MaxSum crashed on `cb`.** `distance()` read `.actions` off its arguments, expecting
+- **B-MaxSum crashed on `cb`.** `dissimilarity()` read `.actions` off its arguments, expecting
   plan objects, while `b_maxsum` passes behaviour strings. It now parses its
   own token and normalises into `[0, 1]`.
 - **`rc` tokens were ambiguous.** Counts were joined with ` $$ `, the separator used

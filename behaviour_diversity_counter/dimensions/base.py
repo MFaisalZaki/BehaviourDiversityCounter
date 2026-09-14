@@ -42,9 +42,11 @@ def token_payload(behaviour, name):
 
 
 class BehaviourDimension:
-    """One feature of the paper's Def. feature: a dimension, its extracting
-    function (``plan_behaviour``), its per-dimension distance in ``[0, 1]``
-    (``distance``, before the weight is applied) and its weight.
+    """One feature ``<Delta, extract, psi, w>`` of the paper's Def. feature:
+    the values a plan can take on the dimension (``domain``), the extracting
+    function (``extract``), the dissimilarity ``psi`` on those values, in
+    ``[0, 1]`` before the weight is applied (``dissimilarity``), and the
+    weight ``w``.
     """
 
     def __init__(self, task, name, addinfo, weight=None):
@@ -61,8 +63,8 @@ class BehaviourDimension:
         assert value is not None, 'The dimension value should be present in the plan behaviour.'
         return value
 
-    def distance(self, b1, b2):
-        """This dimension's term of ``d(b, b') = sum_i w_i * d_i(b_i, b'_i)``.
+    def dissimilarity(self, b1, b2):
+        """This dimension's term of ``psi_M(b, b') = sum_i w_i * psi_i(b_i, b'_i)``.
 
         An implementation scores the pair in [0, 1] and scales by ``self.weight``.
         """

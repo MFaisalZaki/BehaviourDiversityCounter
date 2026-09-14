@@ -24,7 +24,7 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
         self.max_goals = options(addinfo).get('max-goals')
         self.vars = atoms if self.max_goals is None else atoms[:self.max_goals]
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         _time_step_history = defaultdict(list)
         for t, state in enumerate(plan.states):
             for g in self.vars:
@@ -36,9 +36,9 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
     def _ordering(self, behaviour):
         return self.payload(behaviour).replace(' ', '').split('->')
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         # The Hamming distance between the two orderings, divided by the number
-        # of goals so that it lies in [0, 1] (sec. features of the paper).
+        # of goals so that it lies in [0, 1] (Def. feature).
         ordering1, ordering2 = self._ordering(b1), self._ordering(b2)
         hamming = sum(x != y for x, y in zip(ordering1, ordering2))
         return self.weight * (hamming / len(ordering1) if ordering1 else 0.0)

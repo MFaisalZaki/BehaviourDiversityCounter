@@ -122,7 +122,7 @@ and record the rule (lowest index in the cost-sorted pool). State this in the re
 
 | Path | Status | Treatment |
 |---|---|---|
-| `behaviour_diversity_counter/behaviour_diversity_counter.py` | indicators, `extract`, caches | Use. Audit in Phase 0. Note `DEFAULT_K_NN = 3`; the paper fixes no kappa, so **every experiment passes `k_nn` explicitly** and never relies on the default. |
+| `behaviour_diversity_counter/behaviour_diversity_counter.py` | indicators, `extract`, caches | Use. Audit in Phase 0. Note `DEFAULT_KAPPA = 3`; the paper fixes no kappa, so **every experiment passes `kappa` explicitly** and never relies on the default. |
 | `behaviour_diversity_counter/dimensions/*.py` | `go`, `cbin`, `rn`, `ru`, `rc`, `uv`, `fn`, `cb` | Use `go`, `cbin`, `rn`, `ru`. Add `stability.py` (Section 7.3). Docstrings cite theorem names that no longer exist in the paper; leave them, the author will sync. |
 | `behaviour_diversity_counter/simulation.py` | replay, cost | Use. |
 | `tests/conftest.py` | tiny transport task fixture | May be imported by new tests. |

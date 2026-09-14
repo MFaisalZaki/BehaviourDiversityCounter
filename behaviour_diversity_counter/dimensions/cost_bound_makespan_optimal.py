@@ -13,7 +13,7 @@ class MakespanOptimalCostDimension(BehaviourDimension):
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'cb', addinfo, declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         # The counter attaches the cost it accumulated while simulating; a
         # dimension used on its own replays the plan to get it.
         cost = getattr(plan, 'cost', None)
@@ -25,10 +25,10 @@ class MakespanOptimalCostDimension(BehaviourDimension):
     def _cost(self, behaviour):
         return Fraction(self.payload(behaviour))
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         cost1, cost2 = self._cost(b1), self._cost(b2)
         if max(cost1, cost2) == 0:
             return 0.0
         # 1 - min/max: a metric on the non-negative costs, in [0, 1], and zero
-        # exactly on equal costs, as Def. feature and Def. separable-distance ask.
+        # exactly on equal costs, as Def. feature and Def. similarity-space ask.
         return self.weight * float(abs(cost1 - cost2) / max(cost1, cost2))

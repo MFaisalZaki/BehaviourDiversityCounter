@@ -29,7 +29,7 @@ class ResourceCountDimension(BehaviourDimension):
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'rc', _declared_resources(task, addinfo), declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         usage = _usage(self.addinfo['objects'], plan)
         # One prefixed token, comma-separated: ' $$ ' separates *dimensions*, so it
         # cannot also separate counts within this one. Sorted because addinfo['objects']
@@ -41,7 +41,7 @@ class ResourceCountDimension(BehaviourDimension):
     def _counts(self, behaviour):
         return {name: int(count) for name, count in _pairs(self.payload(behaviour)).items()}
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         # Weighted Jaccard (Ruzicka) distance over the count vectors:
         # 1 - sum_o min(c_o, c'_o) / sum_o max(c_o, c'_o). A metric in [0, 1],
         # zero exactly on equal counts, and the plain Jaccard of `ru` when every
@@ -61,7 +61,7 @@ class ResourceUsedDimension(BehaviourDimension):
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'ru', _declared_resources(task, addinfo), declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         usage = _usage(self.addinfo['objects'], plan)
         used = ','.join(sorted(name for name, count in usage.items() if count > 0))
         self.domain.add(used)
@@ -70,7 +70,7 @@ class ResourceUsedDimension(BehaviourDimension):
     def _used_set(self, behaviour):
         return set(filter(None, self.payload(behaviour).split(',')))
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         # Jaccard distance over the two used sets: a metric in [0, 1].
         s1, s2 = self._used_set(b1), self._used_set(b2)
         if not s1 and not s2:
@@ -87,11 +87,11 @@ class ResourceNumberDimension(BehaviourDimension):
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'rn', _declared_resources(task, addinfo), declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         usage = _usage(self.addinfo['objects'], plan)
         number = sum(1 for count in usage.values() if count > 0)
         self.domain.add(number)
         return f'{self.name}:{number}'
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         return self.weight * (0.0 if self.payload(b1) == self.payload(b2) else 1.0)

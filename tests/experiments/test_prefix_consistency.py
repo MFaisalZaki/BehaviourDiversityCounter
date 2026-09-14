@@ -48,9 +48,9 @@ def test_a_run_to_k_max_equals_the_runs_to_each_k(seeded):
             for kappa in KAPPAS:
                 if indicator != 'bnovelty' and kappa != KAPPAS[0]:
                     continue        # only B-Novelty reads kappa
-                long_run = counter.extract(plans, k_max, indicator=indicator, k_nn=kappa)
+                long_run = counter.extract(plans, k_max, indicator=indicator, kappa=kappa)
                 for k in range(2, k_max + 1):
-                    short = counter.extract(plans, k, indicator=indicator, k_nn=kappa)
+                    short = counter.extract(plans, k, indicator=indicator, kappa=kappa)
                     assert [id(p) for p in short] == [id(p) for p in long_run[:k]], (
                         f'{instance} {model} {indicator} kappa={kappa}: the run to k={k} '
                         f'is not the first {k} of the run to k={k_max}')
@@ -63,7 +63,7 @@ def test_every_run_returns_exactly_min_k_pool(seeded):
     for instance, model, counter, plans in cases(seeded):
         for indicator in runner.INDICATORS:
             for k in (1, 2, 3, 5, len(plans) + 3):
-                picked = counter.extract(plans, k, indicator=indicator, k_nn=2)
+                picked = counter.extract(plans, k, indicator=indicator, kappa=2)
                 assert len(picked) == min(k, len(plans)), (
                     f'{instance} {model} {indicator} k={k}: got {len(picked)} plans')
                 assert len({id(p) for p in picked}) == len(picked), 'a plan came back twice'
@@ -73,7 +73,7 @@ def test_b_coverage_and_b_maxsum_never_fall_along_a_prefix(seeded):
     """The monotone half of claim C4, on real pools rather than random spaces."""
     for instance, model, counter, plans in cases(seeded):
         for indicator in ('bcoverage', 'bmaxsum'):
-            picked = counter.extract(plans, min(6, len(plans)), indicator=indicator, k_nn=2)
+            picked = counter.extract(plans, min(6, len(plans)), indicator=indicator, kappa=2)
             values = [runner.indicators(counter, picked[:k], 2)[indicator]
                       for k in range(1, len(picked) + 1)]
             assert values == sorted(values), (

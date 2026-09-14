@@ -35,7 +35,7 @@ emit its plans in.
 | # | Check | Outcome |
 |---|---|---|
 | 1 | Every library indicator equals the reference indicator to 1e-9, over 500 random spaces and pools, with and without duplicate behaviours, for kappa in {1, 2, 3, 5} | pass |
-| 2 | `extract(..., indicator, k_nn)` returns the same behaviour set as the reference extraction, and — asserted separately — the same indicator value, for every indicator and k in 1..6 | pass, after the fix below |
+| 2 | `extract(..., indicator, kappa)` returns the same behaviour set as the reference extraction, and — asserted separately — the same indicator value, for every indicator and k in 1..6 | pass, after the fix below |
 | 3 | The paper's worked examples in `tests/test_golden.py` still pass | pass |
 | 4 | Twinning: adding a plan whose behaviour is already held leaves all four indicators exactly unchanged | pass |
 | 5 | B-Coverage and B-MaxSum never fall as a plan is added; B-MaxMin and B-Novelty have counterexamples in the sample | pass, counterexample quoted below |
@@ -43,8 +43,8 @@ emit its plans in.
 | 7 | Every per-dimension dissimilarity of every model, `stability` included, is zero only on equal values, over every pair of values the dimension takes on the smoke pools (Def. feature's definiteness) | pass |
 | 8 | The stability model on the transport fixture: `b` is the number of distinct action sets, `psi_M` equals `ref_stability` on every pair, and B-MaxSum selection under it equals `ref_extract_bmaxsum` with `ref_stability` as `d`; the same comparison over the committed smoke pools includes the stability model | pass |
 
-Every one of those calls passes `k_nn` explicitly. The library's
-`DEFAULT_K_NN = 3` is never relied on anywhere in the evaluation: the paper
+Every one of those calls passes `kappa` explicitly. The library's
+`DEFAULT_KAPPA = 3` is never relied on anywhere in the evaluation: the paper
 fixes no kappa, so an experiment that took the default would be reporting a
 number the paper does not define.
 
@@ -175,6 +175,6 @@ rule. On the committed driverlog and rovers pools every plan is a permutation
 of one action set, so the stability model sees one behaviour where the feature
 models see six or eight; the case study's stability reading shows this.
 
-The library's `_extract_b_coverage` docstring no longer cites the retired
+The library's `_extract_bcoverage` docstring no longer cites the retired
 optimality theorem; the paper (2026-09-14) makes no claim about the selection
 functions, and the audit compares them with the reference rules only.

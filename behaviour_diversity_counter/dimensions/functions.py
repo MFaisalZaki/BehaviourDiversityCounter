@@ -34,7 +34,7 @@ class NumericFunctionDimension(BehaviourDimension):
         index = int((value - fn['min']) // fn['delta'])
         return min(max(index, 0), count - 1)
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         # A lazy state holds only the fluents its own action changed, so the
         # final value of a fluent is the last value seen anywhere in the trace.
         final_values = {}
@@ -56,7 +56,7 @@ class NumericFunctionDimension(BehaviourDimension):
         return {name: int(index) for name, index in
                 (item.split('=') for item in self.payload(behaviour).split(',') if item)}
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         # Per function, the bin distance |i - i'| / (bins - 1), which respects
         # the bin order as the paper requires of a quantised dimension; averaged
         # over the declared functions so the term stays in [0, 1].

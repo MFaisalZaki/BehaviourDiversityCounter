@@ -48,7 +48,7 @@ def run_task(task_id, cfg):
     for k in cfg['selection']['k_values']:
         for indicator in runner.INDICATORS:
             for repeat in range(cfg['e3']['repeats']):
-                counter._behaviour_distance_cache.clear()      # every sample pays b^2
+                counter._dissimilarity_cache.clear()      # every sample pays b^2
                 _, wall, cpu = runner.select(counter, plans, min(k, len(plans)), indicator, kappa)
                 samples.append({'phase': 'selection', 'indicator': indicator,
                                 'k': min(k, len(plans)), 'kappa': kappa, 'repeat': repeat,

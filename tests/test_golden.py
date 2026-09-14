@@ -48,7 +48,7 @@ class RoversUsedDimension(BehaviourDimension):
     def __init__(self):
         super().__init__(task=None, name='nr', addinfo=None)
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         same = token(b1, self.name) == token(b2, self.name)
         return self.weight * (0.0 if same else 1.0)
 
@@ -61,7 +61,7 @@ class CollectionOrderDimension(BehaviourDimension):
     def __init__(self):
         super().__init__(task=None, name='co', addinfo=None)
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         s1, s2 = token(b1, self.name), token(b2, self.name)
         return self.weight * sum(x != y for x, y in zip(s1, s2)) / len(s1)
 
@@ -81,7 +81,7 @@ class StubCounter(BehaviourDiversityCounter):
     """A counter over the two stub dimensions, with no task and no simulator.
 
     Plans are handed their behaviours directly through the behaviour cache, so
-    the real ``_behaviours_of`` runs and never reaches ``_simulate``.
+    the real ``_plan_behaviours`` runs and never reaches ``_simulate``.
     """
 
     def __init__(self):
@@ -91,7 +91,7 @@ class StubCounter(BehaviourDiversityCounter):
         self._simulator = None
         self._behaviour_cache = {}
         self._cost_cache = {}
-        self._behaviour_distance_cache = {}
+        self._dissimilarity_cache = {}
         self._plans = []          # keeps the plans alive: the cache is keyed by id()
 
     def make_plans(self, *specs):
@@ -112,16 +112,16 @@ def counter():
     return StubCounter()
 
 
-def naive_b_novelty(counter, plans, k_nn):
+def naive_b_novelty(counter, plans, kappa):
     """B-Novelty straight off the definition, for cross-checking the library."""
     distinct = list(dict.fromkeys(plan.behaviour for plan in plans))
     b = len(distinct)
     if b < 2:
         return 0.0
-    k_prime = min(k_nn, b - 1)
+    k_prime = min(kappa, b - 1)
     total = 0.0
     for i, behaviour in enumerate(distinct):
-        others = sorted(counter._pair_distance(behaviour, distinct[j])
+        others = sorted(counter._dissimilarity(behaviour, distinct[j])
                         for j in range(b) if j != i)
         total += sum(others[:k_prime]) / k_prime
     return total / b
@@ -152,7 +152,7 @@ class TestWorkedExampleOne:
         assert counter.b_maxmin(plans) == pytest.approx(0.5)
 
     def test_b_novelty(self, counter, plans):
-        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(0.5)
+        assert counter.b_novelty(plans, kappa=1) == pytest.approx(0.5)
 
 # ----------------------------------------------------------------------
 # Test 2: the three-behaviour example
@@ -168,9 +168,9 @@ class TestWorkedExampleTwo:
     def test_the_three_pairwise_distances(self, counter, plans):
         rsi, ris, sir = (plan.behaviour for plan in plans)
 
-        assert counter._pair_distance(rsi, ris) == pytest.approx(1 / 3)
-        assert counter._pair_distance(rsi, sir) == pytest.approx(1.0)
-        assert counter._pair_distance(ris, sir) == pytest.approx(5 / 6)
+        assert counter._dissimilarity(rsi, ris) == pytest.approx(1 / 3)
+        assert counter._dissimilarity(rsi, sir) == pytest.approx(1.0)
+        assert counter._dissimilarity(ris, sir) == pytest.approx(5 / 6)
 
     def test_b_maxsum(self, counter, plans):
         assert counter.b_maxsum(plans) == pytest.approx(13 / 6)
@@ -180,7 +180,7 @@ class TestWorkedExampleTwo:
 
     def test_b_novelty(self, counter, plans):
         """Nearest-neighbour distances 1/3, 1/3 and 5/6, averaging to 1/2."""
-        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(1 / 2)
+        assert counter.b_novelty(plans, kappa=1) == pytest.approx(1 / 2)
 
 
 # ----------------------------------------------------------------------
@@ -194,13 +194,13 @@ class TestOracleTable:
         plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'RSI'))
         rsi1, ris1, rsi2 = (plan.behaviour for plan in plans)
 
-        assert counter._pair_distance(rsi1, rsi2) == pytest.approx(1 / 2)
-        assert counter._pair_distance(ris1, rsi2) == pytest.approx(5 / 6)
+        assert counter._dissimilarity(rsi1, rsi2) == pytest.approx(1 / 2)
+        assert counter._dissimilarity(ris1, rsi2) == pytest.approx(5 / 6)
         assert counter.b_coverage(plans) == 3
         assert counter.b_maxsum(plans) == pytest.approx(5 / 3)
         assert counter.b_maxmin(plans) == pytest.approx(1 / 3)
-        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(7 / 18)
-        assert counter.b_novelty(plans, k_nn=2) == pytest.approx(5 / 9)
+        assert counter.b_novelty(plans, kappa=1) == pytest.approx(7 / 18)
+        assert counter.b_novelty(plans, kappa=2) == pytest.approx(5 / 9)
 
     def test_pair(self, counter):
         plans = counter.make_plans((1, 'RSI'), (2, 'SIR'))
@@ -208,26 +208,26 @@ class TestOracleTable:
         assert counter.b_coverage(plans) == 2
         assert counter.b_maxsum(plans) == pytest.approx(1.0)
         assert counter.b_maxmin(plans) == pytest.approx(1.0)
-        assert counter.b_novelty(plans, k_nn=1) == pytest.approx(1.0)
+        assert counter.b_novelty(plans, kappa=1) == pytest.approx(1.0)
 
     def test_single_behaviour(self, counter):
         plans = counter.make_plans((1, 'RSI'))
 
         assert (counter.b_coverage(plans), counter.b_maxsum(plans), counter.b_maxmin(plans),
-                counter.b_novelty(plans, k_nn=1)) == (1, 0, 0, 0)
+                counter.b_novelty(plans, kappa=1)) == (1, 0, 0, 0)
 
     def test_second_set_with_a_larger_neighbourhood(self, counter):
         """kappa' clamps to 2; per-behaviour means 2/3, 7/12 and 11/12."""
         plans = counter.make_plans((1, 'RSI'), (1, 'RIS'), (2, 'SIR'))
 
-        assert counter.b_novelty(plans, k_nn=2) == pytest.approx(13 / 18)
-        assert counter.b_novelty(plans, k_nn=3) == pytest.approx(13 / 18)
+        assert counter.b_novelty(plans, kappa=2) == pytest.approx(13 / 18)
+        assert counter.b_novelty(plans, kappa=3) == pytest.approx(13 / 18)
 
     def test_first_set_under_every_kappa(self, counter):
         plans = counter.make_plans((2, 'RIS'), (1, 'RIS'), (1, 'RIS'))
 
-        for k_nn in (1, 2, 3, 15):
-            assert counter.b_novelty(plans, k_nn=k_nn) == pytest.approx(1 / 2)
+        for kappa in (1, 2, 3, 15):
+            assert counter.b_novelty(plans, kappa=kappa) == pytest.approx(1 / 2)
 
     def test_b_maxsum_is_not_submodular(self, counter):
         """The gain of <1,RIS> on {<1,RSI>, <2,SIR>} is 7/6; on the empty set 0."""
@@ -254,9 +254,9 @@ class TestOracleTable:
 # ----------------------------------------------------------------------
 
 class TestWeightConvention:
-    """Def. feature asks for a per-dimension distance in [0, 1] and a positive
-    weight; Prop. separable then puts the behaviour distance in [0, 1] when the
-    weights sum to one. Uniform 1/n is the counter's default, and the paper's
+    """Def. feature asks for a per-dimension dissimilarity in [0, 1] and a
+    weight in (0, 1]; Def. diversity-model has the weights sum to one, which
+    puts psi_M in [0, 1]. Uniform 1/n is the counter's default, and the paper's
     example weights."""
 
     def test_undeclared_weights_are_uniform(self, counter):
@@ -267,25 +267,25 @@ class TestWeightConvention:
         plans = counter.make_plans(*[(rovers, order) for rovers in (1, 2) for order in orders])
         behaviours = [plan.behaviour for plan in plans]
 
-        distances = [counter._pair_distance(a, b) for a in behaviours for b in behaviours]
+        distances = [counter._dissimilarity(a, b) for a in behaviours for b in behaviours]
 
         assert min(distances) == 0.0
         assert max(distances) == pytest.approx(1.0)
 
     def test_the_distance_is_definite(self, counter):
-        """Zero exactly on equal behaviours, as Def. separable-distance assumes."""
+        """Zero exactly on equal behaviours, as Def. similarity-space requires."""
         a, b, c = counter.make_plans((1, 'RSI'), (1, 'RSI'), (2, 'RSI'))
 
-        assert counter._pair_distance(a.behaviour, b.behaviour) == 0.0
-        assert counter._pair_distance(a.behaviour, c.behaviour) > 0.0
+        assert counter._dissimilarity(a.behaviour, b.behaviour) == 0.0
+        assert counter._dissimilarity(a.behaviour, c.behaviour) > 0.0
 
 
 # ----------------------------------------------------------------------
-# Test 4: the k_nn clamp
+# Test 4: the kappa clamp
 # ----------------------------------------------------------------------
 
 class TestNoveltyClamping:
-    """With b <= k_nn every behaviour averages over *all* the others, so
+    """With b <= kappa every behaviour averages over *all* the others, so
     B-Novelty collapses to B-MaxSum / C(b, 2) -- the mean pairwise distance.
 
     Recorded as a golden test because it makes B-Novelty duplicate B-MaxSum's
@@ -301,20 +301,20 @@ class TestNoveltyClamping:
     def test_novelty_is_the_mean_pairwise_distance(self, counter, specs):
         plans = counter.make_plans(*specs)
         b = counter.b_coverage(plans)
-        k_nn = b  # b <= k_nn, so k' = min(k_nn, b - 1) = b - 1
+        kappa = b  # b <= kappa, so k' = min(kappa, b - 1) = b - 1
 
-        assert counter.b_novelty(plans, k_nn=k_nn) == pytest.approx(
+        assert counter.b_novelty(plans, kappa=kappa) == pytest.approx(
             counter.b_maxsum(plans) / math.comb(b, 2))
 
     def test_the_clamp_binds_only_while_b_is_small(self, counter):
-        """With b > k_nn the two indicators genuinely part company."""
+        """With b > kappa the two indicators genuinely part company."""
         plans = counter.make_plans(
             (1, 'RSI'), (1, 'RIS'), (2, 'SIR'), (3, 'IRS'), (4, 'ISR'),
         )
         b = counter.b_coverage(plans)
 
         assert b == 5
-        assert counter.b_novelty(plans, k_nn=2) != pytest.approx(
+        assert counter.b_novelty(plans, kappa=2) != pytest.approx(
             counter.b_maxsum(plans) / math.comb(b, 2))
 
 
@@ -345,10 +345,10 @@ class TestDuplicateInvariance:
         assert after == pytest.approx(before)
 
     def test_many_duplicates_change_nothing_either(self, counter, plans):
-        before = counter.b_novelty(plans, k_nn=1)
+        before = counter.b_novelty(plans, kappa=1)
         duplicated = plans + counter.make_plans(*[(2, 'SIR')] * 20)
 
-        assert counter.b_novelty(duplicated, k_nn=1) == pytest.approx(before)
+        assert counter.b_novelty(duplicated, kappa=1) == pytest.approx(before)
 
 
 class TestSelectorsHonourTheirIndicators:
@@ -390,13 +390,13 @@ class TestSelectorsHonourTheirIndicators:
         shows in the indicator of the returned set rather than in a duplicate
         handed to the user in place of an option."""
         a, b, a_again, c = counter.make_plans((1, 'RSI'), (2, 'SIR'), (1, 'RSI'), (2, 'RSI'))
-        assert counter.b_novelty([a, b], k_nn=1) == pytest.approx(1.0)
-        assert counter.b_novelty([a, b, c], k_nn=1) < 1.0
+        assert counter.b_novelty([a, b], kappa=1) == pytest.approx(1.0)
+        assert counter.b_novelty([a, b, c], kappa=1) < 1.0
 
-        selected = counter.extract([a, b, a_again, c], k=3, indicator='bnovelty', k_nn=1)
+        selected = counter.extract([a, b, a_again, c], k=3, indicator='bnovelty', kappa=1)
 
         assert counter.b_coverage(selected) == 3
-        assert counter.b_novelty(selected, k_nn=1) < 1.0
+        assert counter.b_novelty(selected, kappa=1) < 1.0
 
     def test_ties_break_towards_the_lowest_plan_index(self, counter):
         """Two plans exhibit the same behaviour; the earlier one must be taken."""

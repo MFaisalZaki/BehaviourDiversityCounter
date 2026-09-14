@@ -185,7 +185,7 @@ def positions(plans, chosen):
 def library_value(counter, plans, indicator, kappa):
     """The library's own reading of an indicator on a set of plans."""
     if indicator == 'bnovelty':
-        return counter.b_novelty(plans, k_nn=kappa)
+        return counter.b_novelty(plans, kappa=kappa)
     return float({'bcoverage': counter.b_coverage, 'bmaxsum': counter.b_maxsum,
                   'bmaxmin': counter.b_maxmin}[indicator](plans))
 
@@ -229,7 +229,7 @@ def compare_extraction(counter, plans, space, k, indicator, kappa):
     """One extraction, library against reference: None when they agree, else
     ``(kind, lost, report)`` -- 'value' or 'set', and the score given away."""
     trip = triples(plans)
-    chosen = positions(plans, counter.extract(plans, k, indicator=indicator, k_nn=kappa))
+    chosen = positions(plans, counter.extract(plans, k, indicator=indicator, kappa=kappa))
     wanted = ref_extract(indicator, trip, space.d, k, kappa)
     got_b = [trip[i][2] for i in chosen]
     want_b = [trip[i][2] for i in wanted]
@@ -265,7 +265,7 @@ def test_indicators_match_reference(space):
         assert counter.b_maxmin(plans) == pytest.approx(
             ref_bmaxmin(behaviours, sp.d), abs=TOL), why
         for kappa in KAPPAS:
-            assert counter.b_novelty(plans, k_nn=kappa) == pytest.approx(
+            assert counter.b_novelty(plans, kappa=kappa) == pytest.approx(
                 ref_bnovelty(behaviours, sp.d, kappa), abs=TOL), f'{why} kappa={kappa}'
 
 
@@ -403,7 +403,7 @@ def test_extraction_returns_k_plans(space):
         for k in (-2, 0, 1, 3, 5, 7):
             for indicator in INDICATORS:
                 kappa = KAPPAS[(case + k) % len(KAPPAS)]
-                chosen = counter.extract(plans, k, indicator=indicator, k_nn=kappa)
+                chosen = counter.extract(plans, k, indicator=indicator, kappa=kappa)
                 assert len(chosen) == max(0, min(k, len(plans))), (
                     f'seed={case} {sp} k={k} {indicator} kappa={kappa}: '
                     f'{len(chosen)} plans came back, not min(k, |C|)')
@@ -451,7 +451,7 @@ def test_bcoverage_extraction_is_the_stated_rule(space):
             costs.setdefault(behaviour, []).append(cost)
         for k in (0, 1, 2, 3, 5, 9):
             chosen = positions(plans, counter.extract(plans, k, indicator='bcoverage',
-                                                      k_nn=3))
+                                                      kappa=3))
             wanted = ref_extract('bcoverage', trip, sp.d, k, 3)
             assert chosen == wanted, (
                 f'seed={case} {sp} k={k}: the library returned pool positions {chosen}, '
@@ -581,7 +581,7 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
                 for kappa in (1, 2, 3):
                     for indicator in INDICATORS:
                         chosen = positions(plans, counter.extract(
-                            plans, k, indicator=indicator, k_nn=kappa))
+                            plans, k, indicator=indicator, kappa=kappa))
                         wanted = ref_extract(indicator, trip, d, k, kappa)
                         got_b = [trip[i][2] for i in chosen]
                         want_b = [trip[i][2] for i in wanted]
@@ -625,9 +625,9 @@ def test_every_dimension_is_definite_on_the_committed_pools(tmp_path):
             for dim in counter.dimensions.values():
                 values = sorted(map(str, dim.domain))
                 for x in values:
-                    assert dim.distance(f'{dim.name}:{x}', f'{dim.name}:{x}') == 0.0, (spec.name, dim.name, x)
+                    assert dim.dissimilarity(f'{dim.name}:{x}', f'{dim.name}:{x}') == 0.0, (spec.name, dim.name, x)
                 for x, y in combinations(values, 2):
-                    assert dim.distance(f'{dim.name}:{x}', f'{dim.name}:{y}') > 0, (spec.name, dim.name, x, y)
+                    assert dim.dissimilarity(f'{dim.name}:{x}', f'{dim.name}:{y}') > 0, (spec.name, dim.name, x, y)
                     pairs += 1
     assert pairs > 50, f'only {pairs} pairs of distinct values: the smoke pools are not exercising this'
 
@@ -645,12 +645,12 @@ def test_the_stability_model_is_the_stability_distance(task, plan_l1_then_l2, pl
     assert counter.b_coverage(plans) == len({frozenset(a) for a in actions}) == 3
     for i, j in combinations(range(len(plans)), 2):
         counter.b_coverage(plans)
-        assert counter._pair_distance(plans[i].behaviour, plans[j].behaviour) == pytest.approx(
+        assert counter._dissimilarity(plans[i].behaviour, plans[j].behaviour) == pytest.approx(
             ref_stability(actions[i], actions[j]))
     trip = [(i, 1, frozenset(a)) for i, a in enumerate(actions)]
     d = lambda x, y: ref_stability(x, y)
     for k in (1, 2, 3, 4):
-        chosen = positions(plans, counter.extract(plans, k, indicator='bmaxsum', k_nn=1))
+        chosen = positions(plans, counter.extract(plans, k, indicator='bmaxsum', kappa=1))
         assert chosen == ref_extract('bmaxsum', trip, d, k, 1), k
 
 
@@ -659,10 +659,10 @@ def test_the_audit_never_relies_on_the_default_k_nn():
     call the audit makes into ``b_novelty`` or ``extract`` must name its own."""
     here = os.path.dirname(os.path.abspath(__file__))
     call = re.compile(r'\.(?:extract|b_novelty)\((?:[^()]|\([^()]*\))*\)')
-    borrowed = re.compile(r'^\s*(?:from|import)\b.*\bDEFAULT_K_NN\b', re.M)
+    borrowed = re.compile(r'^\s*(?:from|import)\b.*\bDEFAULT_KAPPA\b', re.M)
     for name in ('conftest.py', 'test_audit.py'):
         with open(os.path.join(here, name)) as handle:
             source = handle.read()
         assert not borrowed.search(source), f'{name} imports the library default kappa'
-        silent = [m.group(0) for m in call.finditer(source) if 'k_nn' not in m.group(0)]
+        silent = [m.group(0) for m in call.finditer(source) if 'kappa' not in m.group(0)]
         assert not silent, f'{name} leaves kappa to the library in: {silent}'

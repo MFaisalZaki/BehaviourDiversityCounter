@@ -20,7 +20,7 @@ class StabilityDimension(BehaviourDimension):
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'stability', addinfo, declared_weight(addinfo))
 
-    def plan_behaviour(self, plan):
+    def extract(self, plan):
         value = SEPARATOR.join(sorted({str(action) for action in plan.actions}))
         self.domain.add(value)
         return f'{self.name}:{value}'
@@ -28,7 +28,7 @@ class StabilityDimension(BehaviourDimension):
     def _actions(self, behaviour):
         return set(filter(None, self.payload(behaviour).split(SEPARATOR)))
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         a1, a2 = self._actions(b1), self._actions(b2)
         if not a1 and not a2:
             return 0.0

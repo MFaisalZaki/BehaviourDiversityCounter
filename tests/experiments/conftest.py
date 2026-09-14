@@ -35,7 +35,7 @@ class StubDimension(BehaviourDimension):
         self.values = list(values)
         self.table = table
 
-    def distance(self, b1, b2):
+    def dissimilarity(self, b1, b2):
         return self.weight * self.table[(self.payload(b1), self.payload(b2))]
 
 
@@ -55,7 +55,7 @@ class StubCounter(BehaviourDiversityCounter):
     """A counter over stub dimensions, with no task and no simulator.
 
     Plans are handed their behaviours and costs through the caches, so the real
-    ``_behaviours_of`` runs and never reaches ``_simulate``.
+    ``_plan_behaviours`` runs and never reaches ``_simulate``.
     """
 
     def __init__(self, dimensions):
@@ -65,7 +65,7 @@ class StubCounter(BehaviourDiversityCounter):
         self._simulator = None
         self._behaviour_cache = {}
         self._cost_cache = {}
-        self._behaviour_distance_cache = {}
+        self._dissimilarity_cache = {}
         self._plans = []          # the caches are keyed by id(): keep them alive
 
     def make_plans(self, specs):

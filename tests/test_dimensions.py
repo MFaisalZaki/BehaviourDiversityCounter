@@ -2,7 +2,7 @@
 
 Each dimension turns a simulated plan into a behaviour token. Tokens from all
 enabled dimensions are joined with ' $$ ' by BehaviourDiversityCounter, and the
-distance() implementations parse their own token back out of that joined string.
+dissimilarity() implementations parse their own token back out of that joined string.
 """
 
 import pytest
@@ -27,7 +27,7 @@ from behaviour_diversity_counter.dimensions.utility_value import UtilityValueDim
 
 
 def simulate(task, plan):
-    """Attach the state trace a dimension's plan_behaviour() reads."""
+    """Attach the state trace a dimension's extract() reads."""
     simulator = SequentialSimulator(problem=task)
     state = simulator.get_initial_state()
     states = [state]
@@ -42,7 +42,7 @@ def simulate(task, plan):
 class TestBase:
     def test_subclasses_must_implement_distance(self, task):
         with pytest.raises(AssertionError, match='implemented by the child class'):
-            BehaviourDimension(task, 'x', None).distance('a', 'b')
+            BehaviourDimension(task, 'x', None).dissimilarity('a', 'b')
 
 
 class TestWeights:
@@ -52,12 +52,12 @@ class TestWeights:
         """Weight 1.0 by default, so an undeclared dimension scores unscaled."""
         plain = GoalPredicatesOrderingDimension(task)
         weighted = GoalPredicatesOrderingDimension(task, {'weight': 0.25})
-        first = plain.plan_behaviour(simulate(task, plan_l1_then_l2))
-        second = plain.plan_behaviour(simulate(task, plan_l2_then_l1))
+        first = plain.extract(simulate(task, plan_l1_then_l2))
+        second = plain.extract(simulate(task, plan_l2_then_l1))
 
         assert plain.weight == 1.0
-        assert plain.distance(first, second) == 1.0
-        assert weighted.distance(first, second) == pytest.approx(0.25)
+        assert plain.dissimilarity(first, second) == 1.0
+        assert weighted.dissimilarity(first, second) == pytest.approx(0.25)
 
     def test_a_path_shaped_addinfo_can_still_declare_one(self, task, resource_file):
         """`ru` takes a file path, so its weight is declared alongside it."""
@@ -75,14 +75,14 @@ class TestGoalPredicatesOrdering:
     ):
         dimension = GoalPredicatesOrderingDimension(task)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         assert behaviour == 'go:delivered(l1)->delivered(l2)'
 
     def test_reversed_delivery_yields_the_reversed_token(self, task, plan_l2_then_l1):
         dimension = GoalPredicatesOrderingDimension(task)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
+        behaviour = dimension.extract(simulate(task, plan_l2_then_l1))
 
         assert behaviour == 'go:delivered(l2)->delivered(l1)'
 
@@ -91,54 +91,54 @@ class TestGoalPredicatesOrdering:
     ):
         dimension = GoalPredicatesOrderingDimension(task)
 
-        assert dimension.plan_behaviour(simulate(task, plan_l1_then_l2)) == (
-            dimension.plan_behaviour(simulate(task, plan_two_trucks))
+        assert dimension.extract(simulate(task, plan_l1_then_l2)) == (
+            dimension.extract(simulate(task, plan_two_trucks))
         )
 
     def test_distance_is_zero_for_identical_orderings(self, task, plan_l1_then_l2):
         dimension = GoalPredicatesOrderingDimension(task)
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
-        assert dimension.distance(behaviour, behaviour) == 0.0
+        assert dimension.dissimilarity(behaviour, behaviour) == 0.0
 
     def test_distance_is_one_when_every_position_differs(
         self, task, plan_l1_then_l2, plan_l2_then_l1
     ):
         dimension = GoalPredicatesOrderingDimension(task)
-        first = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
-        second = dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
+        first = dimension.extract(simulate(task, plan_l1_then_l2))
+        second = dimension.extract(simulate(task, plan_l2_then_l1))
 
-        assert dimension.distance(first, second) == 1.0
+        assert dimension.dissimilarity(first, second) == 1.0
 
     def test_distance_is_symmetric(self, task, plan_l1_then_l2, plan_l2_then_l1):
         dimension = GoalPredicatesOrderingDimension(task)
-        first = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
-        second = dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
+        first = dimension.extract(simulate(task, plan_l1_then_l2))
+        second = dimension.extract(simulate(task, plan_l2_then_l1))
 
-        assert dimension.distance(first, second) == dimension.distance(second, first)
+        assert dimension.dissimilarity(first, second) == dimension.dissimilarity(second, first)
 
     def test_distance_requires_its_own_token_to_be_present(self, task, plan_l1_then_l2):
         dimension = GoalPredicatesOrderingDimension(task)
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         with pytest.raises(AssertionError, match='should be present'):
-            dimension.distance(behaviour, 'cb:4')
+            dimension.dissimilarity(behaviour, 'cb:4')
 
     def test_distance_finds_its_token_among_others(self, task, plan_l1_then_l2):
         """The token is located by prefix, so 'ru:...' must not be mistaken for it."""
         dimension = GoalPredicatesOrderingDimension(task)
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         combined = f'cb:4 $$ {behaviour} $$ ru:tr1'
 
-        assert dimension.distance(combined, behaviour) == 0.0
+        assert dimension.dissimilarity(combined, behaviour) == 0.0
 
 
 class TestMakespanOptimalCost:
     def test_behaviour_is_the_plan_length_under_unit_cost(self, task, plan_l1_then_l2):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
-        assert dimension.plan_behaviour(plan_l1_then_l2) == 'cb:4'
+        assert dimension.extract(plan_l1_then_l2) == 'cb:4'
 
     def test_behaviour_is_the_summed_action_cost_under_a_cost_metric(
         self, domain, plan_l1_then_l2, plan_two_trucks
@@ -151,58 +151,58 @@ class TestMakespanOptimalCost:
         task.add_quality_metric(MinimizeActionCosts({domain['move']: Int(5), domain['drop']: Int(1)}))
         dimension = MakespanOptimalCostDimension(task)
 
-        assert dimension.plan_behaviour(plan_l1_then_l2) == 'cb:12'
-        assert dimension.plan_behaviour(plan_two_trucks) == 'cb:12'
+        assert dimension.extract(plan_l1_then_l2) == 'cb:12'
+        assert dimension.extract(plan_two_trucks) == 'cb:12'
 
     def test_behaviour_reads_the_cost_the_counter_attached(self, task, plan_l1_then_l2):
         dimension = MakespanOptimalCostDimension(task)
         plan_l1_then_l2.cost = 7
 
-        assert dimension.plan_behaviour(plan_l1_then_l2) == 'cb:7'
+        assert dimension.extract(plan_l1_then_l2) == 'cb:7'
         del plan_l1_then_l2.cost
 
     def test_distance_accepts_behaviour_strings_like_the_other_dimensions(self, task):
-        """Regression: distance() read .actions off its arguments, so it only worked
+        """Regression: dissimilarity() read .actions off its arguments, so it only worked
         on plan objects -- but b_maxsum passes behaviour strings."""
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
         # |4 - 6| / max(4, 6)
-        assert dimension.distance('cb:4', 'cb:6') == pytest.approx(1 / 3)
+        assert dimension.dissimilarity('cb:4', 'cb:6') == pytest.approx(1 / 3)
 
     def test_distance_is_zero_for_equal_costs(self, task):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
-        assert dimension.distance('cb:4', 'cb:4') == 0.0
+        assert dimension.dissimilarity('cb:4', 'cb:4') == 0.0
 
     def test_distance_is_normalised_into_the_unit_interval(self, task):
         """The score averages across dimensions, so cost cannot be unbounded."""
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
-        assert dimension.distance('cb:1', 'cb:1000') <= 1.0
-        assert dimension.distance('cb:0', 'cb:9') == 1.0
+        assert dimension.dissimilarity('cb:1', 'cb:1000') <= 1.0
+        assert dimension.dissimilarity('cb:0', 'cb:9') == 1.0
 
     def test_two_empty_plans_are_identical(self, task):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
-        assert dimension.distance('cb:0', 'cb:0') == 0.0
+        assert dimension.dissimilarity('cb:0', 'cb:0') == 0.0
 
     def test_distance_is_symmetric(self, task):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
-        assert dimension.distance('cb:4', 'cb:6') == dimension.distance('cb:6', 'cb:4')
+        assert dimension.dissimilarity('cb:4', 'cb:6') == dimension.dissimilarity('cb:6', 'cb:4')
 
     def test_distance_finds_its_token_among_others(self, task):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
         combined = 'go:delivered(l1)->delivered(l2) $$ cb:4 $$ ru:tr1'
 
-        assert dimension.distance(combined, 'cb:4') == 0.0
+        assert dimension.dissimilarity(combined, 'cb:4') == 0.0
 
     def test_distance_requires_its_own_token_to_be_present(self, task):
         dimension = MakespanOptimalCostDimension(task, {'q': 1.0})
 
         with pytest.raises(AssertionError, match='should be present'):
-            dimension.distance('go:delivered(l1)', 'cb:4')
+            dimension.dissimilarity('go:delivered(l1)', 'cb:4')
 
 
 class TestResourceUsed:
@@ -211,7 +211,7 @@ class TestResourceUsed:
     ):
         dimension = ResourceUsedDimension(task, resource_file)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         assert behaviour == 'ru:tr1'
 
@@ -220,7 +220,7 @@ class TestResourceUsed:
     ):
         dimension = ResourceUsedDimension(task, resource_file)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_two_trucks))
+        behaviour = dimension.extract(simulate(task, plan_two_trucks))
 
         assert behaviour == 'ru:tr1,tr2'
 
@@ -229,33 +229,33 @@ class TestResourceUsed:
     ):
         dimension = ResourceUsedDimension(task, resource_file)
 
-        assert dimension.plan_behaviour(simulate(task, plan_l1_then_l2)) == (
-            dimension.plan_behaviour(simulate(task, plan_l2_then_l1))
+        assert dimension.extract(simulate(task, plan_l1_then_l2)) == (
+            dimension.extract(simulate(task, plan_l2_then_l1))
         )
 
     def test_distance_is_zero_for_the_same_resource_set(
         self, task, resource_file, plan_l1_then_l2
     ):
         dimension = ResourceUsedDimension(task, resource_file)
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
-        assert dimension.distance(behaviour, behaviour) == 0.0
+        assert dimension.dissimilarity(behaviour, behaviour) == 0.0
 
     def test_distance_is_the_jaccard_complement(self, task, resource_file):
         dimension = ResourceUsedDimension(task, resource_file)
 
         # {tr1} vs {tr1, tr2}: intersection 1, union 2 -> 1 - 1/2
-        assert dimension.distance('ru:tr1', 'ru:tr1,tr2') == 0.5
+        assert dimension.dissimilarity('ru:tr1', 'ru:tr1,tr2') == 0.5
 
     def test_disjoint_resource_sets_are_maximally_distant(self, task, resource_file):
         dimension = ResourceUsedDimension(task, resource_file)
 
-        assert dimension.distance('ru:tr1', 'ru:tr2') == 1.0
+        assert dimension.dissimilarity('ru:tr1', 'ru:tr2') == 1.0
 
     def test_two_empty_resource_sets_are_identical(self, task, resource_file):
         dimension = ResourceUsedDimension(task, resource_file)
 
-        assert dimension.distance('ru:', 'ru:') == 0.0
+        assert dimension.dissimilarity('ru:', 'ru:') == 0.0
 
     def test_token_is_matched_by_prefix_not_substring(self, task, resource_file):
         """'ru' occurs inside 'truck1'; the goal token must not shadow ours."""
@@ -263,13 +263,13 @@ class TestResourceUsed:
 
         combined = 'go:at(truck1,l0)->delivered(l1) $$ ru:tr1'
 
-        assert dimension.distance(combined, 'ru:tr1') == 0.0
+        assert dimension.dissimilarity(combined, 'ru:tr1') == 0.0
 
     def test_distance_requires_its_own_token_to_be_present(self, task, resource_file):
         dimension = ResourceUsedDimension(task, resource_file)
 
         with pytest.raises(AssertionError, match='should be present'):
-            dimension.distance('cb:4', 'ru:tr1')
+            dimension.dissimilarity('cb:4', 'ru:tr1')
 
 
 class TestResourceCount:
@@ -278,7 +278,7 @@ class TestResourceCount:
     ):
         dimension = ResourceCountDimension(task, resource_file)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         # tr1 appears in all four actions; tr2 in none.
         assert behaviour == 'rc:tr1=4,tr2=0'
@@ -297,7 +297,7 @@ class TestResourceCount:
         dimension = ResourceCountDimension(task, resource_file)
         dimension.addinfo['objects'] = {'tr5', 'tr3', 'tr1', 'tr6', 'tr2', 'tr4'}
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         assert behaviour == 'rc:tr1=4,tr2=0,tr3=0,tr4=0,tr5=0,tr6=0'
 
@@ -306,8 +306,8 @@ class TestResourceCount:
     ):
         dimension = ResourceCountDimension(task, resource_file)
 
-        first = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
-        second = dimension.plan_behaviour(simulate(task, plan_two_trucks))
+        first = dimension.extract(simulate(task, plan_l1_then_l2))
+        second = dimension.extract(simulate(task, plan_two_trucks))
 
         assert first != second
 
@@ -315,20 +315,20 @@ class TestResourceCount:
         """1 - sum(min) / sum(max): tr1 shares 2 of 4, tr2 shares 0 of 2."""
         dimension = ResourceCountDimension(task, resource_file)
 
-        assert dimension.distance('rc:tr1=4,tr2=0', 'rc:tr1=2,tr2=2') == pytest.approx(1 - 2 / 6)
+        assert dimension.dissimilarity('rc:tr1=4,tr2=0', 'rc:tr1=2,tr2=2') == pytest.approx(1 - 2 / 6)
 
     def test_distance_is_zero_on_equal_counts_and_one_on_disjoint_use(self, task, resource_file):
         dimension = ResourceCountDimension(task, resource_file)
 
-        assert dimension.distance('rc:tr1=4,tr2=0', 'rc:tr1=4,tr2=0') == 0.0
-        assert dimension.distance('rc:tr1=4,tr2=0', 'rc:tr1=0,tr2=3') == 1.0
-        assert dimension.distance('rc:tr1=0,tr2=0', 'rc:tr1=0,tr2=0') == 0.0
+        assert dimension.dissimilarity('rc:tr1=4,tr2=0', 'rc:tr1=4,tr2=0') == 0.0
+        assert dimension.dissimilarity('rc:tr1=4,tr2=0', 'rc:tr1=0,tr2=3') == 1.0
+        assert dimension.dissimilarity('rc:tr1=0,tr2=0', 'rc:tr1=0,tr2=0') == 0.0
 
     def test_distance_agrees_with_ru_on_binary_counts(self, task, resource_file):
         counts = ResourceCountDimension(task, resource_file)
         used = ResourceUsedDimension(task, resource_file)
 
-        assert counts.distance('rc:tr1=1,tr2=0', 'rc:tr1=1,tr2=1') == used.distance('ru:tr1', 'ru:tr1,tr2')
+        assert counts.dissimilarity('rc:tr1=1,tr2=0', 'rc:tr1=1,tr2=1') == used.dissimilarity('ru:tr1', 'ru:tr1,tr2')
 
     def test_behaviour_is_a_single_separator_free_token(
         self, task, resource_file, plan_l1_then_l2
@@ -338,7 +338,7 @@ class TestResourceCount:
         split back into one token per dimension."""
         dimension = ResourceCountDimension(task, resource_file)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         assert ' $$ ' not in behaviour
         assert behaviour.startswith('rc:')
@@ -363,7 +363,7 @@ class TestUtilityValue:
     ):
         dimension = UtilityValueDimension(task, utility_goals)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         assert behaviour == 'utility_value:8 -- delivered(l1)=5,delivered(l2)=3'
 
@@ -375,7 +375,7 @@ class TestUtilityValue:
         only_l1 = make_plan((move, (tr1, l0, l1)), (drop, (tr1, l1)))
         dimension = UtilityValueDimension(task, utility_goals)
 
-        behaviour = dimension.plan_behaviour(simulate(task, only_l1))
+        behaviour = dimension.extract(simulate(task, only_l1))
 
         assert behaviour == 'utility_value:5 -- delivered(l1)=5,delivered(l2)=0'
 
@@ -390,7 +390,7 @@ class TestUtilityValue:
         dimension = UtilityValueDimension(task, {'utility-goals': {at(tr1, l0): 7}})
         plan = make_plan((move, (tr1, l0, l1)))
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan))
+        behaviour = dimension.extract(simulate(task, plan))
 
         assert behaviour == 'utility_value:7 -- at(tr1, l0)=7'
 
@@ -403,16 +403,16 @@ class TestUtilityValue:
         only_l1 = 'utility_value:5 -- delivered(l1)=5,delivered(l2)=0'
         none = 'utility_value:0 -- delivered(l1)=0,delivered(l2)=0'
 
-        assert dimension.distance(both, only_l1) == pytest.approx(3 / 8)
-        assert dimension.distance(both, both) == 0.0
-        assert dimension.distance(both, none) == 1.0
-        assert dimension.distance(none, none) == 0.0
+        assert dimension.dissimilarity(both, only_l1) == pytest.approx(3 / 8)
+        assert dimension.dissimilarity(both, both) == 0.0
+        assert dimension.dissimilarity(both, none) == 1.0
+        assert dimension.dissimilarity(none, none) == 0.0
 
     def test_distance_parses_goals_that_contain_commas(self, task, domain):
         at, tr1, l0, l1 = domain['at'], domain['tr1'], domain['l0'], domain['l1']
         dimension = UtilityValueDimension(task, {'utility-goals': {at(tr1, l0): 7, at(tr1, l1): 1}})
 
-        assert dimension.distance('utility_value:8 -- at(tr1, l0)=7,at(tr1, l1)=1',
+        assert dimension.dissimilarity('utility_value:8 -- at(tr1, l0)=7,at(tr1, l1)=1',
                                   'utility_value:1 -- at(tr1, l0)=0,at(tr1, l1)=1') == pytest.approx(7 / 8)
 
 
@@ -422,11 +422,11 @@ class TestFunctions:
     ):
         """Two regressions: min/max were swapped at parse time, which made the bin
         list empty and raised IndexError before any value could be binned; and
-        plan_behaviour returned ','.join(val) over an already-joined string, so
+        extract returned ','.join(val) over an already-joined string, so
         'fuel:8' came back as 'f,u,e,l,:,8'."""
         dimension = NumericFunctionDimension(task, function_file)
 
-        behaviour = dimension.plan_behaviour(simulate(task, plan_l1_then_l2))
+        behaviour = dimension.extract(simulate(task, plan_l1_then_l2))
 
         # 100 fuel - 2 moves * 10 = 80 -> bin index 8
         assert behaviour == 'fn:fuel=8'
@@ -443,8 +443,8 @@ class TestFunctions:
         # 0..100 step 10 is ten bins of the user's width; 90 fuel -> bin 9,
         # 70 fuel -> bin 7. (The top bin used to be dropped, folding 90..100
         # into bin 8 and making it twice as wide as declared.)
-        assert dimension.plan_behaviour(simulate(task, one_move)) == 'fn:fuel=9'
-        assert dimension.plan_behaviour(simulate(task, three_moves)) == 'fn:fuel=7'
+        assert dimension.extract(simulate(task, one_move)) == 'fn:fuel=9'
+        assert dimension.extract(simulate(task, three_moves)) == 'fn:fuel=7'
 
     def test_values_at_or_beyond_the_range_land_in_the_end_bins(self, task, function_file):
         dimension = NumericFunctionDimension(task, function_file)
@@ -459,10 +459,10 @@ class TestFunctions:
         a quantised dimension; the full span scores 1."""
         dimension = NumericFunctionDimension(task, function_file)
 
-        assert dimension.distance('fn:fuel=8', 'fn:fuel=8') == 0.0
-        assert dimension.distance('fn:fuel=8', 'fn:fuel=7') == pytest.approx(1 / 9)
-        assert dimension.distance('fn:fuel=9', 'fn:fuel=0') == pytest.approx(1.0)
-        assert dimension.distance('fn:fuel=8', 'fn:fuel=7') < dimension.distance('fn:fuel=8', 'fn:fuel=2')
+        assert dimension.dissimilarity('fn:fuel=8', 'fn:fuel=8') == 0.0
+        assert dimension.dissimilarity('fn:fuel=8', 'fn:fuel=7') == pytest.approx(1 / 9)
+        assert dimension.dissimilarity('fn:fuel=9', 'fn:fuel=0') == pytest.approx(1.0)
+        assert dimension.dissimilarity('fn:fuel=8', 'fn:fuel=7') < dimension.dissimilarity('fn:fuel=8', 'fn:fuel=2')
 
     def test_distance_averages_over_the_declared_functions(self, task, tmp_path):
         path = tmp_path / 'two.txt'
@@ -470,7 +470,7 @@ class TestFunctions:
         dimension = NumericFunctionDimension(task, str(path))
 
         # fuel 9 bins apart of 9 -> 1; water 1 apart of 3 -> 1/3; mean 2/3.
-        assert dimension.distance('fn:fuel=0,water=0', 'fn:fuel=9,water=1') == pytest.approx(2 / 3)
+        assert dimension.dissimilarity('fn:fuel=0,water=0', 'fn:fuel=9,water=1') == pytest.approx(2 / 3)
 
     def test_dimension_is_usable_through_the_counter(
         self, task, function_file, plan_l1_then_l2
