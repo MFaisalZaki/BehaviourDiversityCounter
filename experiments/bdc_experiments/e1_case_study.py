@@ -6,12 +6,11 @@ domain-specific models of its domain: the pool's behaviours, the four
 selections at the configured k, and every returned pair feature by feature.
 
 Picking the instance means knowing how many behaviours each candidate pool
-exhibits, so ``tasks`` surveys the pools and builds the behaviour dump of any
-candidate that has none yet. That listing phase runs in the parent process,
-serially, and outside ``run_task``'s selection time limit; the survey is
-memoised so it runs once per process rather than once per call. A
-``runner.ensure_dump`` returning b without the b x b matrix would remove the
-cost properly: an infrastructure need, reported and not worked around here.
+exhibits, so ``tasks`` surveys the pools, building the behaviour dump of any
+candidate that has none. That listing runs in the parent process, serially, and
+outside ``run_task``'s time limit; the survey is memoised so it runs once per
+process. A ``runner.ensure_dump`` returning b without the b x b matrix would
+remove the cost properly: an infrastructure need, reported, not worked around.
 """
 
 from itertools import combinations
@@ -24,8 +23,8 @@ RULE = ('the smallest instance (smallest pool size, then the instance id) whose 
         'at least min_behaviours behaviours under the first model and at least two distinct '
         'values on that model resource feature; failing that, the smallest satisfying the '
         'behaviour count alone; failing that -- a fallback the specification does not ask for, '
-        'taken so that the report is not left with no case study at all -- the pool with the '
-        'most behaviours, which then does not meet min_behaviours')
+        'taken so that the report is not left with no case study -- the pool with the most '
+        'behaviours, which then does not meet min_behaviours')
 
 #: Which clause of ``RULE`` decided, in the order the rule tries them.
 CLAUSES = ('the behaviour count and a varying resource feature', 'the behaviour count alone',
@@ -84,13 +83,18 @@ def _survey(cfg):
                'model': spec.name, 'resource_feature': key, 'pool_size': None, 'b': None,
                'resource_values': None, 'unusable': None}
         try:
-            dump = runner.load_dump(cfg, models.model_hash(spec), pool['domain'],
-                                    Path(pool['instance']).name, path.stem)
-            if dump is None:
-                dump = runner.setup(cfg, ctx, spec)[4]
-            column = dump['features'].index(key)
-            row.update(pool_size=len(dump['plans']), b=len(dump['distinct']),
-                       resource_values=len({b[column] for b in dump['distinct']}))
+            # The summary sidecar, not the dump: the survey asks only for b and
+            # one feature's values, and on a large pool the b x b matrix is most
+            # of the dump and none of the answer.
+            summary = runner.load_summary(cfg, models.model_hash(spec), pool['domain'],
+                                          Path(pool['instance']).name, path.stem)
+            if summary is None:
+                runner.setup(cfg, ctx, spec)
+                summary = runner.load_summary(cfg, models.model_hash(spec), pool['domain'],
+                                              Path(pool['instance']).name, path.stem)
+            column = summary['features'].index(key)
+            row.update(pool_size=summary['pool_size'], b=summary['b'],
+                       resource_values=len({b[column] for b in summary['distinct']}))
         except Exception as failure:        # SkipTask included: it is an Exception
             row['unusable'] = f'{type(failure).__name__}: {failure}'
         found.append(row)
@@ -98,7 +102,7 @@ def _survey(cfg):
     return found
 
 
-def _clauses(cfg, found):
+def _candidates(cfg, found):
     """The three nested candidate lists the rule tries, widest last."""
     usable = [row for row in found if row['b'] is not None]
     enough = [row for row in usable if row['b'] >= cfg['e1']['min_behaviours']]
@@ -108,7 +112,7 @@ def _clauses(cfg, found):
 def _choose(cfg, found):
     """The rule, and which of its clauses decided."""
     order = lambda row: (row['pool_size'], row['instance'])
-    usable, enough, varying = _clauses(cfg, found)
+    usable, enough, varying = _candidates(cfg, found)
     if varying:
         return min(varying, key=order), CLAUSES[0]
     if enough:
@@ -207,7 +211,7 @@ def _note(cfg, extra, ignored):
     decided the instance, not the whole survey, which the result file holds."""
     chosen, settings, survey = extra.get('chosen'), cfg['e1'], extra.get('survey', [])
     feature = chosen['resource_feature'] if chosen else None
-    usable, enough, varying = _clauses(cfg, survey)
+    usable, enough, varying = _candidates(cfg, survey)
     # Only the smallest few candidates: on the full sweep the survey runs to
     # dozens of pools and the note has to stay short enough to read.
     shown = sorted(usable, key=lambda row: (row['pool_size'], row['instance']))[:3]
@@ -245,17 +249,15 @@ def _note(cfg, extra, ignored):
                           for f in record['features'])
               + f", weights {record['weight_convention']}" for record in extra.get('models', [])]
     lines += ['', 'One instance is the whole case study: '
-                  + (f"{len(ignored)} further result file(s) were read and left out of every "
-                     f"output here ({', '.join(ignored)})." if ignored else
-                     'one result file was read, and there was no other.')]
+                  + (f"{len(ignored)} further result file(s) were read and left out here "
+                     f"({', '.join(ignored)})." if ignored else 'one result file, no other.')]
     return '\n'.join(lines) + '\n'
 
 
 def _primary(usable):
-    """The one result the case study is built from. E1 reports a single
-    instance, so a stale result file from an earlier pool set is left out rather
-    than concatenated into the tables: the newest result whose task is the one
-    its own survey chose wins."""
+    """The one result the case study is built from: the newest whose task is the
+    one its own survey chose. E1 reports a single instance, so a stale result
+    file from an earlier pool set is left out, not merged into the tables."""
     fresh = [r for r in usable
              if r['task_id'] == ((r.get('extra') or {}).get('chosen') or {}).get('task_id')]
     return max(fresh or usable, key=lambda r: (r.get('started') or '', r['task_id']))

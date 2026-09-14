@@ -94,6 +94,23 @@ class TestOrderAndCache:
         assert path.stat().st_mtime_ns == stamp, 'the second load rewrote the dump'
         assert first == second
 
+    def test_the_summary_sidecar_agrees_with_the_dump(self, smoke, rovers_pool):
+        """Reading b should not mean parsing a b x b matrix."""
+        pool = pools.read_pool(rovers_pool)
+        counter, task = counter_for(smoke, pool)
+        loaded = pools.load_pool(rovers_pool, counter=counter, task=task)
+        record = models.model_record(models.registry(smoke)['generic'], task,
+                                     {'id': pool['instance']})
+        dump = pools.behaviour_dump(smoke, counter, loaded, record)
+        path = pools.summary_path(pools.dump_path(smoke, record['hash'], loaded))
+        summary = json.loads(path.read_text())
+        assert summary['b'] == len(dump['distinct'])
+        assert summary['pool_size'] == len(dump['plans'])
+        assert summary['distinct'] == dump['distinct']
+        assert summary['features'] == dump['features']
+        assert 'matrix' not in summary
+        assert path.stat().st_size < pools.dump_path(smoke, record['hash'], loaded).stat().st_size
+
     def test_the_dump_holds_the_raw_material_for_a_recomputation(self, smoke, rovers_pool):
         pool = pools.read_pool(rovers_pool)
         counter, task = counter_for(smoke, pool)

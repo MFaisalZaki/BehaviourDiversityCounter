@@ -209,7 +209,10 @@ def behaviour_dump(cfg, counter, loaded, model_record, force=False):
     """
     path = dump_path(cfg, model_record['hash'], loaded)
     if path.is_file() and not force:
-        return json.loads(path.read_text())
+        dump = json.loads(path.read_text())
+        if not summary_path(path).is_file():        # a dump written before the sidecar existed
+            _write_summary(path, dump)
+        return dump
 
     plans = loaded['plans']
     counter.b_coverage(plans)                     # fills .behaviour on every plan
@@ -235,7 +238,28 @@ def behaviour_dump(cfg, counter, loaded, model_record, force=False):
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dump))
+    _write_summary(path, dump)
     return dump
+
+
+def _write_summary(path, dump):
+    summary_path(path).write_text(json.dumps(
+        {'schema': 'behaviour-summary', 'version': SCHEMA_VERSION,
+         'instance': dump['instance'], 'domain': dump['domain'],
+         'pool_stem': dump['pool_stem'], 'model': dump['model']['name'],
+         'hash': dump['model']['hash'], 'features': dump['features'],
+         'pool_size': len(dump['plans']), 'b': len(dump['distinct']),
+         'distinct': dump['distinct']}))
+
+
+def summary_path(dump):
+    """The sidecar beside a behaviour dump: everything but the matrix.
+
+    A caller that only wants b, or the behaviour tuples, should not have to
+    parse a b x b matrix to get at them -- on a large pool that is most of the
+    file. E1's instance survey reads this, and nothing else needs to.
+    """
+    return Path(dump).with_suffix('.summary.json')
 
 
 def pool_files(cfg):

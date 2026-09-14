@@ -215,8 +215,23 @@ def load_results(cfg, experiment):
     return [json.loads(path.read_text()) for path in sorted(root.glob('*.json'))] if root.is_dir() else []
 
 
+def dump_file(cfg, model_hash, domain, stem, pool_stem):
+    return results_root(cfg) / 'behaviours' / model_hash / domain / stem / f'{pool_stem}.json'
+
+
 def load_dump(cfg, model_hash, domain, stem, pool_stem):
-    path = (results_root(cfg) / 'behaviours' / model_hash / domain / stem / f'{pool_stem}.json')
+    path = dump_file(cfg, model_hash, domain, stem, pool_stem)
+    return json.loads(path.read_text()) if path.is_file() else None
+
+
+def load_summary(cfg, model_hash, domain, stem, pool_stem):
+    """A dump's b, pool size and behaviour tuples, without its matrix.
+
+    For a question like "how many behaviours does this pool expose?", asked of
+    every candidate pool before one is chosen, parsing the b x b matrix is most
+    of the work and none of the answer.
+    """
+    path = pools.summary_path(dump_file(cfg, model_hash, domain, stem, pool_stem))
     return json.loads(path.read_text()) if path.is_file() else None
 
 
