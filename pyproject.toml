@@ -7,11 +7,7 @@ license = "MIT"
 readme = "README.md"
 packages = [
     { include = "behaviour_diversity_counter" },
-    # The paper's evaluation harness. Installed alongside the library so that
-    # `bdcevalcli` is on the PATH of the venv setup_benchmark.sh builds, and so
-    # a compute node runs the same code the sweep was generated from.
-    { include = "paperexps", from = "paper-experiments" },
-    # The evaluation of the paper's revision: one flat package, its own CLI.
+    # The paper's evaluation: one flat package, its own CLI (`bdcexp`).
     { include = "bdc_experiments", from = "experiments" },
 ]
 
@@ -31,22 +27,13 @@ numpy = ">=1.24"
 # below that its backport stands in, and nothing else changes.
 tomli = { version = "^2.0", python = "<3.11" }
 
-# Optional extras. The harness's own analysis is stdlib-only -- the Wilcoxon
-# test, Holm's correction and Kendall's tau are written out in
-# paperexps/stats.py rather than imported -- so a bare compute node needs none
-# of these.
+# Optional extras, read by the report stage of `bdc_experiments` only: the
+# run stage is the standard library plus this library.
 matplotlib = { version = "^3.6", optional = true }
 scipy = { version = "^1.10", optional = true }
-# `bdc_experiments` reports only: the run stage is stdlib plus the library.
-pandas = { version = "^2.0", optional = true }
 
 [tool.poetry.extras]
-# The figures of `runnner.py --report`. The CSVs and tables run on stdlib alone.
-plots = ["matplotlib"]
-# Only tests/test_harness.py wants scipy, to check the hand-written statistics
-# against it. The sweep itself never imports it.
-stats = ["scipy"]
-analysis = ["matplotlib", "scipy", "pandas"]
+analysis = ["matplotlib", "scipy"]
 
 # Planner engines. Not imported by this package -- it consumes plans rather than
 # producing them -- so they are optional: `poetry install --with planners`.
@@ -61,7 +48,6 @@ up-fast-downward = "^0.4.1"
 pytest = ">=8.0"
 
 [tool.poetry.scripts]
-bdcevalcli = 'paperexps.runnner:main'
 bdcexp = 'bdc_experiments.cli:main'
 
 [build-system]
@@ -70,6 +56,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# paperexps is on the path so the tests can import the harness modules the
-# way the runner does (flat: `import stats`, `import baseline`).
-pythonpath = [".", "experiments", "paper-experiments", "paper-experiments/paperexps"]
+pythonpath = [".", "experiments"]

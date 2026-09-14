@@ -1,8 +1,8 @@
-"""``bdcexp generate | run | report``: the three things the sweep needs."""
+"""``bdcexp generate | run | report | jobs``: the sweep, and its job arrays."""
 
 import argparse
 
-from bdc_experiments import benchmark, generate, pools, report, runner
+from bdc_experiments import benchmark, generate, jobs, pools, report, runner
 from bdc_experiments.config import load, snapshot
 
 
@@ -16,10 +16,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog='bdcexp', description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
 
-    one = _common(sub.add_parser('generate', help='phase one: pools of plans'))
+    one = _common(sub.add_parser('generate', help='phase one: the pools, out of the archive'))
     one.add_argument('--instance', default=None, help='one instance id')
+    one.add_argument('--domain', default=None, help='one domain')
     one.add_argument('--list', action='store_true', help='list the instances and exit')
-    one.add_argument('--force', action='store_true', help='regenerate existing pools')
+    one.add_argument('--force', action='store_true', help='rewrite existing pools')
 
     two = _common(sub.add_parser('run', help='phase two: the selection sweep, or the timing'))
     two.add_argument('kind', choices=sorted(runner.KINDS))
@@ -31,22 +32,33 @@ def main(argv=None):
     three = _common(sub.add_parser('report', help='CSVs, tables, figures, manifest'))
     three.add_argument('report', choices=['setup', *sorted(runner.REPORTS), 'all'])
 
+    four = _common(sub.add_parser('jobs', help='the sweep as slurm job arrays, and a local launcher'))
+    four.add_argument('--skip-existing', action='store_true',
+                      help='leave out the pools and tasks that already have a file')
+
     args = parser.parse_args(argv)
     cfg = load(args.config, results_dir=args.results_dir)
     if not getattr(args, 'list', False):
         snapshot(cfg)
 
     if args.command == 'generate':
-        instances = benchmark.instances(cfg) if benchmark.benchmark_dir(cfg).is_dir() \
-            else benchmark.instances(cfg, root=benchmark.ensure(cfg))
+        if not args.list and generate.archive(cfg) is None:
+            raise SystemExit('[generation].archive is empty: this config runs on committed pools')
+        root = benchmark.benchmark_dir(cfg)
+        root = root if root.is_dir() else benchmark.ensure(cfg)
         if args.list:
-            print('\n'.join(instance['id'] for instance in instances))
+            print('\n'.join(instance['id'] for instance in benchmark.instances(cfg, root=root)))
             return 0
         benchmark.ensure(cfg)
-        generate.run(cfg, instances, force=args.force, only=args.instance)
+        generate.run(cfg, force=args.force, only=args.instance, domain=args.domain)
         return 0
 
     pools.ensure_pools(cfg)
+    if args.command == 'jobs':
+        for path in jobs.write(cfg, skip_existing=args.skip_existing):
+            print(path)
+        return 0
+
     if args.command == 'run':
         if args.list:
             print('\n'.join(runner.tasks(cfg, args.kind)))

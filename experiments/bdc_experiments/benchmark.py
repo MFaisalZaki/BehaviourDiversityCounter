@@ -59,7 +59,10 @@ def instances(cfg, root=None):
     """Every instance of every configured domain, in instance-number order.
 
     The id is ``<domain>/<ipc-year>/<problem-file-stem>``: the file name, not a
-    position in a list, so it survives a benchmark update.
+    position in a list, so it survives a benchmark update. ``inst`` is the
+    1-based position of the problem in its api.py entry with the problems
+    sorted by path, which is how the pool archive and the ru-info tree number
+    the instances (``pfile1, pfile10, pfile11, ...``).
     """
     root = root if root is not None else benchmark_dir(cfg)
     found = []
@@ -70,13 +73,15 @@ def instances(cfg, root=None):
             raise FileNotFoundError(f'no api.py for domain {domain} at {api}')
         for entry in read_api(api):
             ipc = str(entry.get('ipc', 'unknown'))
-            for domain_rel, problem_rel in entry['problems']:
+            problems = sorted((tuple(pair) for pair in entry['problems']), key=lambda pair: pair[1])
+            for inst, (domain_rel, problem_rel) in enumerate(problems, 1):
                 problem = root / 'classical' / problem_rel
                 found.append({
                     'id': f'{domain}/{ipc}/{problem.stem}',
                     'domain': domain,
                     'ipc': ipc,
                     'name': entry.get('name', domain),
+                    'inst': inst,
                     'stem': problem.stem,
                     'domain_file': str(root / 'classical' / domain_rel),
                     'problem_file': str(problem),
@@ -84,10 +89,3 @@ def instances(cfg, root=None):
     found.sort(key=lambda i: (i['domain'], _natural(i['stem'])))
     return found
 
-
-def by_domain(records):
-    """``domain -> [record, ...]``, keeping the order they came in."""
-    grouped = {}
-    for record in records:
-        grouped.setdefault(record['domain'], []).append(record)
-    return grouped

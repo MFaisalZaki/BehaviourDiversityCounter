@@ -27,7 +27,7 @@ TIE_RULE = ('Ties are broken deterministically by the lowest index in the '
             'cost-sorted pool, at the opening pair and at every later step.')
 
 PACKAGES = ('behaviour-diversity-counter', 'unified-planning', 'numpy', 'scipy',
-            'matplotlib', 'up-symk', 'lark')
+            'matplotlib', 'lark')
 
 
 def report_dir(cfg, name):
@@ -149,31 +149,6 @@ def head(result, k=None, kappa=None):
 # Statistics
 # ----------------------------------------------------------------------
 
-def holm(pvalues):
-    """Holm-Bonferroni step-down adjustment, order preserved."""
-    order = sorted(range(len(pvalues)), key=lambda i: pvalues[i])
-    adjusted, running = [0.0] * len(pvalues), 0.0
-    for rank, index in enumerate(order):
-        running = max(running, (len(pvalues) - rank) * pvalues[index])
-        adjusted[index] = min(1.0, running)
-    return adjusted
-
-
-def wilcoxon(x, y):
-    """Two-sided signed-rank test, zero differences dropped; (None, None) when
-    every difference is zero or too few pairs remain."""
-    from scipy.stats import wilcoxon as scipy_wilcoxon
-    pairs = [(a, b) for a, b in zip(x, y) if a is not None and b is not None and a != b]
-    if len(pairs) < 1:
-        return None, None
-    try:
-        result = scipy_wilcoxon([a for a, _ in pairs], [b for _, b in pairs],
-                                zero_method='wilcox', alternative='two-sided')
-    except ValueError:
-        return None, None
-    return float(result.statistic), float(result.pvalue)
-
-
 def kendall(x, y):
     """Kendall's tau-b; (None, None) when it is undefined (a constant input)."""
     from scipy.stats import kendalltau
@@ -221,16 +196,6 @@ def group(rows, keys):
     for row in rows:
         grouped.setdefault(tuple(row.get(key) for key in keys), []).append(row)
     return grouped
-
-
-def summary_rows(rows, keys, value_key):
-    """One row per group: n, median, IQR, and the pooled and macro means."""
-    out = []
-    for values, members in group(rows, keys).items():
-        summary = {**dict(zip(keys, values)), **summarise([r.get(value_key) for r in members]),
-                   'pooled_mean': pooled(members, value_key), 'macro_mean': macro(members, value_key)}
-        out.append(summary)
-    return out
 
 
 # ----------------------------------------------------------------------
@@ -299,8 +264,7 @@ def versions():
 
 def manifest(cfg, name, outputs, results, extra=None):
     """One per report: the code, the data and the counts behind the tables."""
-    from bdc_experiments import benchmark
-    from bdc_experiments.generate import SEARCH
+    from bdc_experiments import benchmark, generate
     from bdc_experiments.runner import git_revision
     counts = {'total': len(results),
               'failed': sum(1 for r in results if r.get('error')),
@@ -315,9 +279,12 @@ def manifest(cfg, name, outputs, results, extra=None):
         'benchmark': {'source': cfg['benchmark']['source'],
                       'pinned_commit': cfg['benchmark']['commit'],
                       'checkout_revision': benchmark.checkout_revision(cfg)},
-        'planner': {'name': cfg['generation']['planner'], 'searches': SEARCH,
-                    'time_limit_s': cfg['run']['time_limit_generation_s'],
-                    'memory_limit_mb': cfg['run']['memory_limit_generation_mb']},
+        'planner': {**generate.PLANNER,
+                    'archive': str(generate.archive(cfg) or ''),
+                    'resources': str(generate._data(cfg, 'benchmark', 'resources') or ''),
+                    'time_limit_s': cfg['generation']['time_limit_s'],
+                    'limits': 'those of the runs that produced the archive; a pool short of its '
+                              'size at or over the time limit is recorded as timed_out'},
         'selection_time_limit_s': cfg['run']['time_limit_selection_s'],
         'seed': cfg['run']['seed'],
         'selection_grid': dict(cfg['selection']),

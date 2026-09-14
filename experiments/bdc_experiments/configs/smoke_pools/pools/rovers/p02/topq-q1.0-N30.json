@@ -24,6 +24,7 @@
  "timed_out": false,
  "exhausted": false,
  "duplicates_dropped": 0,
+ "resources": "(:resource rover0 100 0 5)",
  "plans": [
   {
    "actions": [

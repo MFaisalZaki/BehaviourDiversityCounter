@@ -8,10 +8,10 @@ formulation into the post-hoc selection of Katz and Sohrabi (2020). E2 varies
 the astronaut's weights and E3 the number of features; each variant is a spec
 of its own, with its own hash and its own behaviour dump.
 
-The resource objects of an instance are read from the PDDL problem by type
-name. Two encodings occur in the benchmark and both are handled: rovers
-declares a `rover` type, while the STRIPS encodings of logistics, driverlog and
-satellite carry the type as a unary predicate true in the initial state.
+The agents of an instance are not guessed from the PDDL: they are the
+``(:resource ...)`` declarations the authors wrote per domain, year and
+instance under ``experiments/data/ru-info-dir``, which phase one copies into
+the pool record and ``build_counter`` hands to the ru/rn/rc dimensions.
 """
 
 import hashlib
@@ -40,16 +40,21 @@ class ModelSpec:
 #: are first achieved: in rovers every goal atom is a `communicated_*` atom, in
 #: logistics and satellite every goal atom is a delivery or an image, and in
 #: driverlog the goals also fix where one truck and one driver end up.
+#: The agents (`rn`, `ru`) are the instance's declared resources: rovers in
+#: rovers, trucks in logistics and driverlog, satellites in satellite.
 PER_DOMAIN = (
     ModelSpec('rovers_astronaut', ('rovers',),
-              (FeatureSpec('rn', {'types': ('rover',)}, 0.5), FeatureSpec('go', {}, 0.5))),
+              (FeatureSpec('rn', {}, 0.5), FeatureSpec('go', {}, 0.5))),
     ModelSpec('logistics_dispatcher', ('logistics98', 'logistics00'),
-              (FeatureSpec('ru', {'types': ('truck', 'airplane')}, 0.5), FeatureSpec('go', {}, 0.5))),
+              (FeatureSpec('ru', {}, 0.5), FeatureSpec('go', {}, 0.5))),
     ModelSpec('driverlog_dispatcher', ('driverlog',),
-              (FeatureSpec('ru', {'types': ('driver',)}, 0.5), FeatureSpec('go', {}, 0.5))),
+              (FeatureSpec('ru', {}, 0.5), FeatureSpec('go', {}, 0.5))),
     ModelSpec('satellite_operator', ('satellite',),
-              (FeatureSpec('ru', {'types': ('satellite',)}, 0.5), FeatureSpec('go', {}, 0.5))),
+              (FeatureSpec('ru', {}, 0.5), FeatureSpec('go', {}, 0.5))),
 )
+
+#: The dimensions that read a ``(:resource ...)`` declaration file.
+RESOURCE_KEYS = ('ru', 'rn', 'rc')
 
 #: The literature's model as one feature: the plan's action set, compared by
 #: the stability distance.
@@ -130,26 +135,11 @@ def _sortable(params):
             for key, value in sorted(params.items())}
 
 
-def resource_objects(task, type_names):
-    """The instance's objects of the named types, by user type or, where the
-    encoding is untyped STRIPS, by the unary predicate of that name."""
-    declared = {user_type.name for user_type in task.user_types}
-    chosen = set()
-    for name in type_names:
-        if name in declared:
-            chosen |= {obj.name for obj in task.all_objects if obj.type.name == name}
-            continue
-        for fluent, value in task.initial_values.items():
-            if (value.is_true() and len(fluent.args) == 1
-                    and fluent.fluent().name == name and fluent.args[0].is_object_exp()):
-                chosen.add(fluent.args[0].object().name)
-    return sorted(chosen)
-
-
-def write_resource_file(path, objects):
-    """The ``(:resource ...)`` declaration the ru/rn/rc dimensions read."""
+def write_resource_file(path, declarations):
+    """The instance's ``(:resource ...)`` declarations, verbatim, where the
+    ru/rn/rc dimensions read them."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(''.join(f'(:resource {name} 0 1 1)\n' for name in objects))
+    path.write_text(declarations.strip() + '\n')
     return path
 
 
@@ -157,23 +147,20 @@ def build_counter(spec, task, instance_info, trace_cache=None):
     """The library counter for a spec over one instance.
 
     ``instance_info`` carries what the spec deliberately leaves out: the
-    instance's optimal cost and quality bound (for the cost bin) and the
-    directory the resource declarations are written into.
+    instance's optimal cost and quality bound (for the cost bin), its resource
+    declarations, and the directory those are written into.
     """
     dimensions = []
     for feature in spec.features:
         addinfo = dict(feature.params)
         if feature.weight is not None:
             addinfo['weight'] = feature.weight
-        types = addinfo.pop('types', None)
-        if types is not None:
-            objects = resource_objects(task, types)
-            if not objects:
+        if feature.key in RESOURCE_KEYS:
+            if not instance_info.get('resources'):
                 raise ValueError(f"model {spec.name}: instance {instance_info.get('id')} "
-                                 f'declares no objects of type(s) {list(types)}')
-            path = (instance_info['resource_dir']
-                    / f"{instance_info['id'].replace('/', '__')}-{'_'.join(types)}.txt")
-            addinfo['file'] = str(write_resource_file(path, objects))
+                                 'declares no resources (nothing in the ru-info tree for it)')
+            path = instance_info['resource_dir'] / f"{instance_info['id'].replace('/', '__')}.txt"
+            addinfo['file'] = str(write_resource_file(path, instance_info['resources']))
         if feature.key == 'cbin':
             if instance_info['optimal_cost'] is None:
                 raise ValueError(f"model {spec.name}: instance {instance_info.get('id')} has no "
@@ -227,8 +214,8 @@ def model_record(spec, counter, task, instance_info):
     for feature in spec.features:
         entry = {'key': feature.key, 'params': _sortable(feature.params),
                  'weight': feature.weight, 'size': dimension_size(counter, feature.key)}
-        if 'types' in feature.params:
-            entry['objects'] = resource_objects(task, feature.params['types'])
+        if feature.key in RESOURCE_KEYS:
+            entry['objects'] = sorted(counter.dimensions[feature.key].addinfo['objects'])
         if feature.key == 'go':
             entry['goal_atoms'] = [str(atom) for atom in counter.dimensions['go'].vars]
         features.append(entry)

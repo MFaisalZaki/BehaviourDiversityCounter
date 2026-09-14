@@ -42,7 +42,7 @@ class TestConfig:
     def test_a_missing_section_is_an_error(self, tmp_path):
         text = '\n'.join(line for line in resolve('smoke').read_text().splitlines()
                          if not line.startswith('[e3]') and 'repeats' not in line
-                         and 'pool_sizes = [30]' not in line)
+                         and 'largest_pools' not in line)
         path = tmp_path / 'short.toml'
         path.write_text(text)
         with pytest.raises(ValueError, match='missing (section|key)'):
@@ -71,7 +71,7 @@ class TestCli:
         assert any(path.endswith('models.csv') for path in written)
         manifest = json.loads((tmp_path / 'reports' / 'setup' / 'manifest.json').read_text())
         assert manifest['config']['hash'] and manifest['tie_breaking']
-        assert manifest['planner']['searches']['topq'].startswith('symq_bd(')
+        assert manifest['planner']['name'] == 'forbid-iterative' and manifest['planner']['archive'] == ''
 
     def test_reporting_with_no_results_says_so(self, tmp_path):
         with pytest.raises(SystemExit, match='run the select tasks first'):

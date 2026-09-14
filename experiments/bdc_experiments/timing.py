@@ -10,20 +10,25 @@ record, so the comparison is against the pool that was measured.
 
 import time
 
-from bdc_experiments import models, runner
+from bdc_experiments import models, pools, runner
 
 PROTOCOL = __doc__.split('\n\n')[1].replace('\n', ' ')
 
 #: Why the planner is compared on the wall clock and not on the CPU one.
-GENERATION_CLOCK = ('The planner runs as a subprocess, so the pool record measures its CPU with '
-                    "getrusage(RUSAGE_CHILDREN) around the call; generation_cpu_s is the planner's "
-                    'own CPU. Both ratios are in e3_timing.csv; the table and the figure use the '
-                    'wall clock, which is the clock a user waits on.')
+GENERATION_CLOCK = ("The planner's time is the total-time-seconds the archive recorded for the "
+                    'pool, a wall clock; it recorded no CPU time, so generation_cpu_s and '
+                    'cpu_over_generation are empty. The table and the figure use the wall clock, '
+                    'which is the clock a user waits on.')
 
 
 def tasks(cfg):
-    return runner.pool_tasks(cfg, 'time', set(cfg['e3']['pool_sizes']),
-                             lambda pool: models.timing_specs(cfg, pool['domain']))
+    """E3's models on the ``[e3].largest_pools`` pools with the most plans:
+    every pool was requested at one size, so the sizes vary only where the
+    planner exhausted the bound, and the largest are the ones worth timing."""
+    largest = sorted(pools.pool_files(cfg),
+                     key=lambda path: (-len(pools.read_pool(path)['plans']), str(path)))
+    return runner.pool_tasks(cfg, 'time', lambda pool: models.timing_specs(cfg, pool['domain']),
+                             paths=largest[:cfg['e3']['largest_pools']])
 
 
 def run_task(task_id, cfg):

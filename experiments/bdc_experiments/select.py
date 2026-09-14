@@ -17,9 +17,7 @@ def k_max(cfg):
 
 
 def tasks(cfg):
-    return runner.pool_tasks(
-        cfg, 'select', set(cfg['generation']['pool_sizes']),
-        lambda pool: models.selection_specs(cfg, pool['domain']))
+    return runner.pool_tasks(cfg, 'select', lambda pool: models.selection_specs(cfg, pool['domain']))
 
 
 def run_task(task_id, cfg):

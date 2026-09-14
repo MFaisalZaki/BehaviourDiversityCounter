@@ -1,33 +1,59 @@
 # Running the evaluation
 
 The evaluation of *Behaviour Spaces for Diversity Planning* lives in the
-`bdc_experiments` package under `experiments/`. It has three commands, one
+`bdc_experiments` package under `experiments/`. It has four commands, one
 configuration file, and one output directory that is the artefact shipped with
 the paper.
 
-Everything under `paper-experiments/` is the previous harness. It is not read,
-imported or run by anything described here.
 
 ## Install
 
 ```console
-poetry install --extras analysis --with planners
+poetry install --extras analysis
 ```
 
-* `--extras analysis` adds `scipy` and `matplotlib`. Only the report stage
-  needs them; a compute node that merely runs tasks can leave them out.
-* `--with planners` adds `up-symk`, whose wheel ships the SymK binary phase one
-  drives. A host that only reports does not need it either.
+`--extras analysis` adds `scipy` and `matplotlib`. Only the report stage
+needs them; a compute node that merely runs tasks can leave them out. No
+planner is installed or run: the pools ship with the repository.
+
+## The data
+
+```
+experiments/data/
+  fi-generated-plans-dir.zip   the pools: one file per (q, instance), 1000 plans requested each
+  ru-info-dir/<domain>/<domain>-<year>.json   the (:resource ...) declarations per instance
+  patches/                     the patch the pools' planner was built with
+```
+
+The pools were produced once by forbid-iterative in its top-quality mode with
+the bound `q * c*`, for `q` in 1.0 and 2.0, at 1800 CPU seconds per run. A
+file is named `{q}-{k}-classical-{ipc}-{name}-{inst}-fi-bc-results.json`,
+where `name` and `ipc` are an `api.py` entry of the benchmark and `inst` the
+1-based position of the problem in that entry with its problems sorted by
+path (`pfile1, pfile10, pfile11, ...`). A run the driver killed is a file with
+only its total time; a run the planner cut short at the limit keeps the plans
+it had found.
+
+The declarations name the agents of each instance: rovers in rovers, trucks
+in logistics, driverlog, depot and tpp, satellites in satellite, planes in
+zenotravel. The tree numbers instances by the number in the problem's file
+name (`pfile3` is 3) in every domain but zenotravel, where it numbers them by
+sorted position as the archive does. Phase one tries the number first and the
+position second, and attaches an entry only where it names exactly the
+problem's objects of its kind; an instance the tree has no entry for
+(logistics `prob05`, say) gets none, and the domain model's tasks on it are
+recorded as skipped.
 
 The commands below are written as `poetry run bdcexp ...`; inside an activated
 virtualenv `bdcexp` alone is enough.
 
-## The three commands
+## The commands
 
 ```console
-bdcexp generate <config> [--instance ID] [--list] [--force]
+bdcexp generate <config> [--instance ID] [--domain D] [--list] [--force]
 bdcexp run      <config> <select|time> [--task ID] [--list] [--force] [--jobs N]
 bdcexp report   <config> <setup|e1|e2|e3|all>
+bdcexp jobs     <config> [--skip-existing]
 ```
 
 `<config>` is a path to a TOML file, or the name of one shipped with the
@@ -41,15 +67,17 @@ and both take `--force` to redo one anyway.
 ### Phase one: the pools
 
 ```console
-bdcexp generate default            # clones classical-domains, then runs SymK
+bdcexp generate default            # clones classical-domains, then unpacks the archive
 bdcexp generate default --list     # the instance ids, one per line
 ```
 
 The first call clones `AI-Planning/classical-domains` at the commit pinned in
-`[benchmark].commit` into `runs/<name>/benchmark/`, then runs SymK once per
-`(instance, mode, q, N)` for every `N` in `[generation].pool_sizes` and
-`[e3].pool_sizes`. Instances are taken in instance-number order and the domain
-stops at `[benchmark].instances_per_domain` solved ones.
+`[benchmark].commit` into `runs/<name>/benchmark/`, then writes one pool
+record per archive file of the configured domains at the sizes and quality
+bounds of `[generation]`, with the instance's PDDL paths and its resource
+declarations attached. Instances are taken in instance-number order and the
+domain stops at `[benchmark].instances_per_domain` solved ones, an instance
+counting as solved when its first pool holds a plan.
 
 ### Phase two: two kinds of task
 
@@ -74,8 +102,9 @@ are the generic control, the stability model, the domain's own model where one
 exists, and the astronaut's model at each further weight setting of
 `[e2].weight_settings` (rovers only).
 
-A `time` task is one pool of `[e3].pool_sizes` under one of E3's models (one,
-two and, where the domain has a model, three features). It times,
+A `time` task is one of the `[e3].largest_pools` pools with the most plans
+under one of E3's models (one, two and, where the domain has a model, three
+features). It times,
 `[e3].repeats` times over, a cold mapping of the whole pool into the behaviour
 space and each selection at each `k`.
 
@@ -101,20 +130,43 @@ alone, with no planner installed.
 |---|---|---|
 | `e1` | the `select` results of the configured domains under their own models and under the stability model, at `q = 2.0` | the case study: one instance per domain, the pool's behaviours, the four selections at `k = 3`, every returned pair feature by feature, and the stability selection read under the domain's model |
 | `e2` | the `select` results of the generic and per-domain models, and the weight variants | random equal-count subsets drawn and scored off the dumps; the selection cross table; the weight settings |
-| `e3` | the `time` results | mapping and selection time against the pool size, `b` and the planner |
+| `e3` | the `time` results | mapping and selection time against the pool size, `b` and the planner's own time |
 
 ### On a cluster
 
 ```console
-scripts/slurm_array.sh default                # select and time
-scripts/slurm_array.sh default select         # one kind
+bdcexp jobs default                    # writes runs/default/slurm/
+bash runs/default/slurm/submit_all.sh  # submits every array, in order
+squeue -u $USER                        # watch it
+bash runs/default/slurm/run_local.sh 8 # or run the same commands locally, 8 at a time
 ```
 
-One `sbatch --array` per task kind, one element per task, and a report job
-that waits for both and runs `bdcexp report <config> all`. `SLURM_TIME`,
-`SLURM_MEM` and `SLURM_LOGS` override the defaults. If a site's array limit
-bites, split the generated `<kind>.tasks` file with `split -n l/<parts>` and
-submit the parts.
+`bdcexp jobs` writes the sweep as job arrays, after the layout of
+[pyPMTEvalToolkit](https://github.com/pyPMT/pyPMTEvalToolkit):
+
+```
+runs/<name>/slurm/
+  cmds/generate.txt         one `bdcexp generate --domain` per domain
+  cmds/select.txt           one `bdcexp run select --task` per task
+  cmds/time.txt             one `bdcexp run time --task` per task
+  bdcexp-<kind>[-<n>].sbatch  one job array per chunk of at most max_array_size lines
+  submit_all.sh             clones the benchmark once, then sbatch in dependency order
+  run_local.sh              the same commands through GNU parallel (or bash jobs)
+  logs/                     %x_%A_%a.out and .err per element
+```
+
+Each array element reads its own line of the command file and always exits
+zero, so one failed task never takes the array down; the task's own result
+file records the failure. `[slurm]` in the config sets the CPUs per element,
+an optional partition, account and QOS, the throttle (`--array=...%N` from
+`max_parallel_jobs`), the split (`max_array_size`), the headroom added to each
+task's own time and memory limit, and any extra `#SBATCH` directives. A
+phase-one element unpacks one domain's pools out of the archive, which is
+seconds, so every element gets the phase-two limits. `submit_all.sh` makes the
+task arrays wait for the pool arrays and the report job wait for the task
+arrays. `--skip-existing` leaves out every domain that
+already has pools and every task that already has a result, so a partial
+sweep is resumed by regenerating and submitting again.
 
 ### The smoke sweep
 
@@ -125,8 +177,9 @@ bdcexp report smoke all
 ```
 
 `configs/smoke.toml` runs against four pools committed under
-`configs/smoke_pools/`, with the PDDL they were generated from beside them, so
-it needs neither SymK nor the benchmark checkout. The first `run` copies those
+`configs/smoke_pools/`, with the PDDL they were generated from beside them and
+their resource declarations inside them, so it needs neither the archive nor
+the benchmark checkout. The first `run` copies those
 pools into the run directory. This is what the tests and CI use; the whole
 suite finishes in well under a minute.
 
@@ -136,7 +189,8 @@ suite finishes in well under a minute.
 runs/<name>/
   config.toml                 the configuration as run (its hash is in each manifest)
   benchmark/                  the classical-domains checkout
-  pools/<domain>/<instance>/<mode>-q<q>-N<N>.json          phase one, plans included
+  pools/<domain>/<instance>/topq-q<q>-N<N>.json            phase one, plans and declarations included
+  resources/<instance>.txt                                 the declarations as the ru dimension reads them
   behaviours/<model_hash>/<domain>/<instance>/<pool>.json  per-plan behaviour + cost, b x b matrix
   results/<select|time>/<task>.json                        one raw dump per task
   reports/<setup|e1..e3>/                                  CSVs, tables/*.tex, figures/*.pdf, manifest.json
@@ -169,16 +223,15 @@ so a typo cannot silently change nothing.
 |---|---|---|
 | `run` | `seed` | the seed every random draw is derived from |
 | | `results_dir` | where the whole run is written |
-| | `time_limit_generation_s` | CPU seconds per SymK call |
-| | `memory_limit_generation_mb` | address space per SymK call |
 | | `time_limit_selection_s` | wall seconds per phase-two task |
 | `benchmark` | `source`, `commit` | the classical-domains repository and the pinned commit |
 | | `domains` | directory names under `classical/`, not api.py `name` fields |
 | | `instances_per_domain` | how many solved instances a domain contributes |
-| `generation` | `planner` | `symk` |
-| | `modes` | `topq`, `topk`, or both |
-| | `pool_sizes` | the `N` of the pools the selection sweep runs over |
-| | `q_values` | the quality bounds |
+| | `resources` | the ru-info tree, relative to the config file; empty for committed pools |
+| `generation` | `archive` | the pool archive, relative to the config file; empty for committed pools |
+| | `time_limit_s` | the planner's limit in the runs that produced the archive |
+| | `pool_sizes` | the `k` of the archive files to unpack |
+| | `q_values` | the quality bounds to unpack |
 | `selection` | `k_values`, `kappa_values` | the selection grid every report reads |
 | `models` | `generic` | the control model's features (library keys) and its two knobs |
 | | `stability` | the literature's model has no knobs; the entry only says it is in play |
@@ -186,7 +239,8 @@ so a typo cannot silently change nothing.
 | | `min_behaviours` | the case study's selection rule |
 | `e2` | `random_subsets` | random equal-count subsets drawn per pool and `k` |
 | | `weight_settings` | the astronaut's model's weights; each setting beyond the declared one is a model |
-| `e3` | `pool_sizes`, `repeats` | the timing grid |
+| `e3` | `largest_pools`, `repeats` | how many of the largest pools are timed, and how often |
+| `slurm` | `cpus_per_task`, `partition`, `account`, `qos`, `max_parallel_jobs`, `max_array_size`, `time_headroom_s`, `memory_headroom_mb`, `memory_mb`, `extra_directives` | read by `bdcexp jobs` alone |
 
 ## Adding a diversity model
 
@@ -195,17 +249,16 @@ A model is data. Add a `ModelSpec` to `PER_DOMAIN` in
 
 ```python
 ModelSpec('zenotravel_planner', ('zenotravel',),
-          (FeatureSpec('ru', {'types': ('aircraft',)}, 0.5),
+          (FeatureSpec('ru', {}, 0.5),
            FeatureSpec('go', {}, 0.5)))
 ```
 
 * `key` is a key of the library's `dimensions_map` (`go`, `cbin`, `ru`, `rn`,
   `rc`, `stability`, ...).
-* `params` are the feature's own knobs and nothing instance-specific. A
-  `types` entry names the PDDL types whose objects are the feature's
-  resources; they are resolved against the problem's user types, or -- for the
-  untyped STRIPS encodings -- against the unary predicate of the same name in
-  the initial state.
+* `params` are the feature's own knobs and nothing instance-specific. The
+  resource dimensions (`ru`, `rn`, `rc`) take no params: their objects are
+  the instance's declarations from the ru-info tree, which the pool record
+  carries.
 * `weight` is the feature's weight, or `None` for all features of a model, in
   which case the library's uniform `1/n` applies.
 * `domains` is a tuple of directory names, or `None` for every domain.
@@ -270,13 +323,11 @@ The tables are one per domain: `tables/e1_behaviours_<domain>.tex`,
 
 | File | Columns beyond the nine |
 |---|---|
-| `e3_timing.csv` | one row per sample: `features` (the `n` of the cost expression), `phase` (`mapping` or `selection`), `indicator`, `repeat`, `wall_s`, `cpu_s`, `generation_wall_s` and `generation_cpu_s` from the pool record, `wall_over_generation`, `cpu_over_generation`, `exhausted` |
+| `e3_timing.csv` | one row per sample: `features` (the `n` of the cost expression), `phase` (`mapping` or `selection`), `indicator`, `repeat`, `wall_s`, `cpu_s`, `generation_wall_s` from the pool record (`generation_cpu_s` and `cpu_over_generation` are empty: the archive recorded no CPU time), `wall_over_generation`, `exhausted` |
 | `e3_medians.csv` | per `(N, k, model, features, phase, indicator)`: `samples`, `wall_median` with quartiles, `cpu_median` with quartiles, `cpu_pooled_mean`, `cpu_macro_mean`, `pool_size_median`, `b_median`, `generation_wall_median`, `wall_over_generation_median`, `wall_over_generation_macro` |
 
-Only the wall-clock comparison against generation is like for like: the pool
-record measures the planner subprocess's CPU with `getrusage(RUSAGE_CHILDREN)`
-and its wall clock in the parent. Both ratios are in the CSV; the table and the
-figure use the wall clock.
+The planner's time is the total time the archive recorded for the pool, a
+wall clock; the table and the figure compare against it.
 
 ### Setup, `sec:exp-setup`
 
@@ -287,7 +338,7 @@ figure use the wall clock.
 
 Each report also writes `manifest.json`: the git revision and whether the
 tree was dirty, the config path and hash, the benchmark's pinned and actual
-commit, the planner and the exact search strings, the limits, the seed, the
+commit, the planner, the archive and the ru-info tree, the limits, the seed, the
 selection grid, package versions, the Python and platform, the tie-breaking
 rule, the task counts (ok / failed / skipped), every failure with its message,
 every output path, and the report's own checks under `extra`.
@@ -336,16 +387,16 @@ and configs, counting non-blank, non-comment, non-docstring lines.
 
 | Part | Code lines |
 |---|---|
-| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`) | 1092 |
+| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`, `jobs`) | 1171 |
 | `reference.py` (the Phase 0 arbiter) | 130 |
 | The two task kinds (`select`, `timing`) | 75 |
 | The three reports | 516 |
-| **Total** | **1813** |
+| **Total** | **1892** |
 
-The package is over budget by about three hundred lines. The reports each
+The package is over budget by about four hundred lines. The reports each
 write the CSVs, tables and figures their subsection of the paper names, and
-the infrastructure carries the resumable runner, the planner driver and the
-manifest the plan asks for; nothing was left out.
+the infrastructure carries the resumable runner, the archive importer, the job
+arrays and the manifest the plan asks for; nothing was left out.
 
 ## Known limits
 

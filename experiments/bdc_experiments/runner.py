@@ -65,14 +65,13 @@ def tasks(cfg, kind):
     return module(kind).tasks(cfg)
 
 
-def pool_tasks(cfg, kind, sizes, specs_for):
-    """One task per (pool of a requested size, model): ``<kind>/<instance>/<pool>/<model>``."""
+def pool_tasks(cfg, kind, specs_for, paths=None):
+    """One task per (pool, model): ``<kind>/<instance>/<pool>/<model>``, over
+    every pool of the run or the ``paths`` given."""
     ids = []
-    for path in pools.pool_files(cfg):
+    for path in pools.pool_files(cfg) if paths is None else paths:
         pool = pools.read_pool(path)
-        if pool['requested'] in sizes:
-            ids += [f"{kind}/{pool['instance']}/{path.stem}/{spec.name}"
-                    for spec in specs_for(pool)]
+        ids += [f"{kind}/{pool['instance']}/{path.stem}/{spec.name}" for spec in specs_for(pool)]
     return ids
 
 
@@ -87,7 +86,7 @@ def context(cfg, task_id):
 def instance_info(cfg, pool):
     return {'id': pool['instance'], 'domain': pool['domain'],
             'optimal_cost': pool['optimal_cost'], 'q': pool['q'],
-            'resource_dir': results_root(cfg) / 'resources'}
+            'resources': pool.get('resources'), 'resource_dir': results_root(cfg) / 'resources'}
 
 
 def setup(cfg, ctx, spec, trace_cache=None):
@@ -97,6 +96,9 @@ def setup(cfg, ctx, spec, trace_cache=None):
         raise SkipTask(f"the pool holds no plans"
                        f"{' (the planner timed out)' if pool.get('timed_out') else ''}, "
                        f'so there is nothing to select from')
+    if any(f.key in models.RESOURCE_KEYS for f in spec.features) and not pool.get('resources'):
+        raise SkipTask('the instance has no (:resource ...) declarations in the ru-info tree, '
+                       'so the agents feature of this model cannot be built')
     task = pools.task_of(pool)
     info = instance_info(cfg, pool)
     counter = models.build_counter(spec, task, info, trace_cache=trace_cache)

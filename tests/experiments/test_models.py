@@ -25,26 +25,25 @@ def built(cfg, pool, spec):
     return models.build_counter(spec, task, runner.instance_info(cfg, pool)), task
 
 
-class TestResourceObjects:
-    def test_a_typed_domain_is_read_by_its_user_type(self, smoke):
-        task = pools.task_of(pool_named(smoke, 'rovers'))
-        assert models.resource_objects(task, ('rover',)) == ['rover0']
+class TestResources:
+    """The agents are the pool's own (:resource ...) declarations, copied from
+    the ru-info tree by phase one, never guessed from the PDDL."""
 
-    @pytest.mark.parametrize('domain, types, expected', [
-        ('driverlog', ('driver',), ['driver1']),
-        ('satellite', ('satellite',), ['satellite0']),
+    @pytest.mark.parametrize('domain, key, expected', [
+        ('rovers', 'rn', ['rover0']),
+        ('driverlog', 'ru', ['truck1', 'truck2']),
+        ('satellite', 'ru', ['satellite0']),
     ])
-    def test_an_untyped_strips_domain_is_read_by_its_unary_predicate(
-            self, smoke, domain, types, expected):
-        found = models.resource_objects(pools.task_of(pool_named(smoke, domain)), types)
-        assert set(expected) <= set(found) and found == sorted(found)
+    def test_the_declared_resources_are_the_dimension_objects(self, smoke, domain, key, expected):
+        pool = pool_named(smoke, domain)
+        for name in expected:
+            assert f'(:resource {name} ' in pool['resources']
+        counter, _ = built(smoke, pool, models.domain_model(smoke, domain))
+        assert sorted(counter.dimensions[key].addinfo['objects']) == expected
 
-    def test_an_absent_type_yields_nothing_rather_than_guessing(self, smoke):
-        assert models.resource_objects(pools.task_of(pool_named(smoke, 'rovers')), ('submarine',)) == []
-
-    def test_the_declaration_file_lists_one_resource_per_object(self, tmp_path):
-        path = models.write_resource_file(tmp_path / 'r.txt', ['tr1', 'tr2'])
-        assert path.read_text() == '(:resource tr1 0 1 1)\n(:resource tr2 0 1 1)\n'
+    def test_the_declaration_file_is_written_verbatim(self, tmp_path):
+        path = models.write_resource_file(tmp_path / 'r.txt', '(:resource tr1 100 0 5)\n(:resource tr2 100 0 5)')
+        assert path.read_text() == '(:resource tr1 100 0 5)\n(:resource tr2 100 0 5)\n'
 
 
 class TestRegistry:
@@ -76,10 +75,9 @@ class TestRegistry:
         assert [len(s.features) for s in models.timing_specs(smoke, 'gripper')] == [1, 2]
 
     def test_a_model_whose_resources_are_absent_fails_loudly(self, smoke):
-        spec = models.ModelSpec('nowhere', None,
-                                (models.FeatureSpec('ru', {'types': ('submarine',)}, 1.0),))
-        with pytest.raises(ValueError, match='no objects of type'):
-            built(smoke, pool_named(smoke, 'rovers'), spec)
+        pool = dict(pool_named(smoke, 'rovers'), resources=None)
+        with pytest.raises(ValueError, match='declares no resources'):
+            built(smoke, pool, models.registry(smoke)['rovers_astronaut'])
 
 
 class TestRecord:

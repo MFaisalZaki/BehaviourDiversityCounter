@@ -1,12 +1,10 @@
 # The smoke sweep: the committed pools under configs/smoke_pools/, seconds to
-# run, no planner and no benchmark checkout. Used by the tests and by CI.
+# run, no archive and no benchmark checkout. Used by the tests and by CI.
 # `bdcexp run smoke select` picks this file up by name.
 
 [run]
 seed = 20260913
 results_dir = "runs/smoke"
-time_limit_generation_s = 60
-memory_limit_generation_mb = 4000
 time_limit_selection_s = 60
 
 [benchmark]
@@ -14,10 +12,11 @@ source = "https://github.com/AI-Planning/classical-domains.git"
 commit = "4bd0b42d89ea02bd38af6f93cf20a0ab0cbda9d9"
 domains = ["rovers", "driverlog", "satellite"]
 instances_per_domain = 1
+resources = ""                          # the committed pools carry their declarations
 
 [generation]
-planner = "symk"
-modes = ["topq"]
+archive = ""                            # no phase one: the pools are committed
+time_limit_s = 1800
 pool_sizes = [30]
 q_values = [1.0, 2.0]
 
@@ -38,5 +37,17 @@ random_subsets = 25
 weight_settings = [[0.5, 0.5], [0.25, 0.75]]
 
 [e3]
-pool_sizes = [30]
+largest_pools = 4
 repeats = 2
+
+[slurm]
+cpus_per_task = 1
+partition = ""
+account = ""
+qos = ""
+max_parallel_jobs = 4
+max_array_size = 8
+time_headroom_s = 60
+memory_headroom_mb = 500
+memory_mb = 2000
+extra_directives = []

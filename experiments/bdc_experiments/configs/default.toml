@@ -5,11 +5,9 @@
 [run]
 seed = 20260913
 results_dir = "runs/default"
-time_limit_generation_s = 1800
-memory_limit_generation_mb = 8000
 # Phase two, per task: a task that runs away is a recorded failure, and this
 # is the wall clock at which it becomes one. Generous for the timing tasks,
-# which remap a 10,000-plan pool `[e3].repeats` times over.
+# which remap a 1000-plan pool `[e3].repeats` times over.
 time_limit_selection_s = 3600
 
 [benchmark]
@@ -25,13 +23,20 @@ commit = "4bd0b42d89ea02bd38af6f93cf20a0ab0cbda9d9"
 domains = ["rovers", "logistics98", "driverlog", "satellite", "depot",
            "zenotravel", "tpp", "gripper", "blocks"]
 instances_per_domain = 15
+# The (:resource ...) declarations per domain, year and instance: the agents
+# the domain models read. Relative to this file.
+resources = "../../data/ru-info-dir"
 
 [generation]
-planner = "symk"
-modes = ["topq"]                        # top-quality with bound q * c*
-# N: plans requested per pool of the selection sweep. Phase one also
-# generates the sizes of [e3].pool_sizes, which only the timing tasks read.
-pool_sizes = [1000]
+# The pools as forbid-iterative produced them, top-quality with the bound
+# q * c*: one file per (q, instance). Phase one unpacks the files of the
+# configured domains at these sizes and quality bounds; nothing is planned.
+archive = "../../data/fi-generated-plans-dir.zip"
+# The planner's time limit in the runs that produced the archive. A pool short
+# of its size at or over this wall time is a timeout that kept what it had
+# found; one short of its size inside it is exhausted.
+time_limit_s = 1800
+pool_sizes = [1000]                     # the k in the archive's file names
 q_values = [1.0, 2.0]
 
 [selection]
@@ -53,5 +58,22 @@ random_subsets = 200
 weight_settings = [[0.5, 0.5], [0.25, 0.75], [0.75, 0.25]]   # rovers_astronaut only
 
 [e3]
-pool_sizes = [100, 1000, 10000]
+# Every pool was requested at one size, so the sizes vary only where the
+# planner exhausted the bound; the timing runs on the pools with the most plans.
+largest_pools = 20
 repeats = 5
+
+[slurm]
+# Read by `bdcexp jobs` alone. One job array per task kind, throttled to
+# max_parallel_jobs running elements, split at max_array_size; the limits of
+# an element are the task's own limits from [run] plus the headroom.
+cpus_per_task = 1
+partition = ""                          # empty: the site's default
+account = ""
+qos = ""
+max_parallel_jobs = 50
+max_array_size = 1000
+time_headroom_s = 300
+memory_headroom_mb = 1000
+memory_mb = 8000                        # per element, before the headroom
+extra_directives = []                   # e.g. ["--mail-type=END"]

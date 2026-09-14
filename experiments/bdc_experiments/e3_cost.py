@@ -138,7 +138,7 @@ def report(cfg):
     written.append(rp.manifest(cfg, 'e3', written, runner.load_results(cfg, 'time'), extra={
         'protocol': timing.PROTOCOL, 'generation_clock': timing.GENERATION_CLOCK,
         'no_fit': 'the lines in the figures are reference slopes through the median sample',
-        'repeats': cfg['e3']['repeats'], 'pool_sizes': cfg['e3']['pool_sizes'],
+        'repeats': cfg['e3']['repeats'], 'largest_pools': cfg['e3']['largest_pools'],
         'samples': {'mapping': len(mapping), 'selection': len(rows) - len(mapping)},
         'reference_slope_pool_size': 'drawn' if mapping_slope else 'not drawn: a single pool size',
         'reference_slope_b': 'drawn, within the largest pool size' if selection_slope

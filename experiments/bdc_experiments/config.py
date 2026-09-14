@@ -20,8 +20,6 @@ KEYS = {
     'run': {
         'seed': (int, True),
         'results_dir': (str, True),
-        'time_limit_generation_s': (int, True),
-        'memory_limit_generation_mb': (int, True),
         'time_limit_selection_s': (int, True),
     },
     'benchmark': {
@@ -29,10 +27,11 @@ KEYS = {
         'commit': (str, True),
         'domains': (list, True),
         'instances_per_domain': (int, True),
+        'resources': (str, True),           # the ru-info tree, relative to the config file
     },
     'generation': {
-        'planner': (str, True),
-        'modes': (list, True),
+        'archive': (str, True),             # the pool archive, relative to the config file
+        'time_limit_s': (int, True),        # the limit the archive's runs had
         'pool_sizes': (list, True),
         'q_values': (list, True),
     },
@@ -46,10 +45,22 @@ KEYS = {
     },
     'e1': {'domains': (list, True), 'min_behaviours': (int, True)},
     'e2': {'random_subsets': (int, True), 'weight_settings': (list, True)},
-    'e3': {'pool_sizes': (list, True), 'repeats': (int, True)},
+    'e3': {'largest_pools': (int, True), 'repeats': (int, True)},
+    'slurm': {
+        'cpus_per_task': (int, True),
+        'partition': (str, True),           # empty: the site's default
+        'account': (str, True),
+        'qos': (str, True),
+        'max_parallel_jobs': (int, True),
+        'max_array_size': (int, True),
+        'time_headroom_s': (int, True),
+        'memory_headroom_mb': (int, True),
+        'memory_mb': (int, True),
+        'extra_directives': (list, True),
+    },
 }
 
-#: Configs shipped with the package, so `bdcexp run smoke e3` works anywhere.
+#: Configs shipped with the package, so `bdcexp run smoke select` works anywhere.
 CONFIG_DIR = Path(__file__).parent / 'configs'
 
 

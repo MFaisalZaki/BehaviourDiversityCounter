@@ -1,31 +1,10 @@
-"""The report helpers: the statistics, the CSV and the LaTeX escaping."""
+"""The report helpers: the summaries, the CSV and the LaTeX escaping."""
 
 import csv
 
 import pytest
 
 from bdc_experiments import report
-
-
-class TestHolm:
-    """Holm-Bonferroni against values worked out by hand."""
-
-    def test_known_values(self):
-        # sorted: 0.01 * 3 = 0.03, 0.03 * 2 = 0.06, 0.04 * 1 = 0.04 -> 0.06 by
-        # the running maximum, and the input order is preserved.
-        assert report.holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
-
-    def test_single_p_value_is_unchanged(self):
-        assert report.holm([0.02]) == pytest.approx([0.02])
-
-    def test_is_monotone_and_capped_at_one(self):
-        adjusted = report.holm([0.2, 0.3, 0.9])
-        assert adjusted == pytest.approx([0.6, 0.6, 0.9])
-        assert report.holm([0.5, 0.6, 0.7]) == pytest.approx([1.0, 1.0, 1.0])
-
-    def test_never_falls_below_the_raw_p_value(self):
-        raw = [0.001, 0.01, 0.02, 0.04, 0.5]
-        assert all(a >= p for a, p in zip(report.holm(raw), raw))
 
 
 class TestStatistics:
@@ -42,9 +21,6 @@ class TestStatistics:
         rows = [{'domain': 'a', 'v': 1.0}, {'domain': 'a', 'v': 3.0}, {'domain': 'b', 'v': 10.0}]
         assert report.pooled(rows, 'v') == pytest.approx(14 / 3)
         assert report.macro(rows, 'v') == pytest.approx((2.0 + 10.0) / 2)
-
-    def test_wilcoxon_of_identical_samples_is_missing(self):
-        assert report.wilcoxon([1, 2, 3], [1, 2, 3]) == (None, None)
 
     def test_kendall_of_a_constant_is_missing(self):
         assert report.kendall([1, 1, 1, 1], [1, 2, 3, 4])[0] is None

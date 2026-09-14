@@ -375,8 +375,9 @@ the code, so a change in what a dimension *means* shows up as a failure.
 ## The paper's evaluation
 
 The empirical evaluation lives in `experiments/` as the package `bdc_experiments`, with its
-own CLI: `bdcexp generate | run | report` builds pools of plans with SymK over the
-`classical-domains` benchmark, runs one selection sweep and one timing sweep over them, and
+own CLI: `bdcexp generate | run | report | jobs` unpacks the forbid-iterative pools shipped
+under `experiments/data/` against the `classical-domains` benchmark, runs one selection
+sweep and one timing sweep over them, and
 writes the CSVs, LaTeX tables and figures the six subsections of the paper's evaluation
 consume. Five of the six questions read the same selection sweep, since a selection at
 any smaller `k` is a prefix of the run to the largest. Everything it produces goes under
