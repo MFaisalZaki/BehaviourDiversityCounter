@@ -4,6 +4,14 @@ componentwise, so the features on which two plans differ can be read off.
 One instance, picked from the pools by the rule in ``RULE``, read under the two
 domain-specific models of its domain: the pool's behaviours, the four
 selections at the configured k, and every returned pair feature by feature.
+
+Picking the instance means knowing how many behaviours each candidate pool
+exhibits, so ``tasks`` surveys the pools and builds the behaviour dump of any
+candidate that has none yet. That listing phase runs in the parent process,
+serially, and outside ``run_task``'s selection time limit; the survey is
+memoised so it runs once per process rather than once per call. A
+``runner.ensure_dump`` returning b without the b x b matrix would remove the
+cost properly: an infrastructure need, reported and not worked around here.
 """
 
 from itertools import combinations
@@ -15,7 +23,13 @@ from bdc_experiments import models, pools, report as reports, runner
 RULE = ('the smallest instance (smallest pool size, then the instance id) whose pool exhibits '
         'at least min_behaviours behaviours under the first model and at least two distinct '
         'values on that model resource feature; failing that, the smallest satisfying the '
-        'behaviour count alone')
+        'behaviour count alone; failing that -- a fallback the specification does not ask for, '
+        'taken so that the report is not left with no case study at all -- the pool with the '
+        'most behaviours, which then does not meet min_behaviours')
+
+#: Which clause of ``RULE`` decided, in the order the rule tries them.
+CLAUSES = ('the behaviour count and a varying resource feature', 'the behaviour count alone',
+           'neither clause: the richest pool available, below min_behaviours')
 
 BASE = ['instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b']
 
@@ -29,6 +43,9 @@ OUTPUTS = {
              ['differs', 'contribution', 'psi', 'differing_features']),
 }
 
+#: The survey, per run directory: ``tasks`` and ``run_task`` both want it.
+_SURVEYS = {}
+
 
 def _specs(cfg):
     """The domain-specific models of the configured domain, in registry order.
@@ -41,41 +58,64 @@ def _specs(cfg):
 
 def _survey(cfg):
     """Every pool of the configured domain and q, with the two numbers the rule
-    reads: b, and how many values the first model's resource feature takes."""
+    reads: b, and how many values the model's resource feature takes.
+
+    A pool that cannot be read at all -- the planner timed out and wrote no
+    plans, or the instance declares none of the model's resource objects -- is
+    recorded with b None, never 0, and takes no part in the choice: one such
+    pool must not abort the listing of the whole experiment. Memoised per run
+    directory, since the pools do not change under one invocation.
+    """
+    memo = (cfg['run']['results_dir'], cfg['meta']['config_hash'])
+    if memo in _SURVEYS:
+        return _SURVEYS[memo]
     spec = _specs(cfg)[0]
-    key = spec.features[0].key      # 'rn', the rover-count feature, on rovers
+    # The resource feature by key, not by position, so that reordering a model's
+    # features in models.py cannot silently change the rule. 'rn' on rovers.
+    key = next((f.key for f in spec.features if f.key in ('rn', 'ru', 'rc')),
+               spec.features[0].key)
     found = []
     for path in pools.pool_files(cfg):
         pool = pools.read_pool(path)
         if pool['domain'] != cfg['e1']['domain'] or float(pool['q']) != float(cfg['e1']['q']):
             continue
         ctx = runner.context(cfg, f"e1/{pool['instance']}/{path.stem}")
-        dump = runner.load_dump(cfg, models.model_hash(spec), pool['domain'],
-                                Path(pool['instance']).name, path.stem)
-        if dump is None:
-            dump = runner.setup(cfg, ctx, spec)[4]
-        column = dump['features'].index(key)
-        found.append({'instance': pool['instance'], 'task_id': ctx['task_id'],
-                      'pool_stem': path.stem, 'model': spec.name, 'resource_feature': key,
-                      'pool_size': len(dump['plans']), 'b': len(dump['distinct']),
-                      'resource_values': len({b[column] for b in dump['distinct']})})
+        row = {'instance': pool['instance'], 'task_id': ctx['task_id'], 'pool_stem': path.stem,
+               'model': spec.name, 'resource_feature': key, 'pool_size': None, 'b': None,
+               'resource_values': None, 'unusable': None}
+        try:
+            dump = runner.load_dump(cfg, models.model_hash(spec), pool['domain'],
+                                    Path(pool['instance']).name, path.stem)
+            if dump is None:
+                dump = runner.setup(cfg, ctx, spec)[4]
+            column = dump['features'].index(key)
+            row.update(pool_size=len(dump['plans']), b=len(dump['distinct']),
+                       resource_values=len({b[column] for b in dump['distinct']}))
+        except Exception as failure:        # SkipTask included: it is an Exception
+            row['unusable'] = f'{type(failure).__name__}: {failure}'
+        found.append(row)
+    _SURVEYS[memo] = found
     return found
+
+
+def _clauses(cfg, found):
+    """The three nested candidate lists the rule tries, widest last."""
+    usable = [row for row in found if row['b'] is not None]
+    enough = [row for row in usable if row['b'] >= cfg['e1']['min_behaviours']]
+    return usable, enough, [row for row in enough if row['resource_values'] >= 2]
 
 
 def _choose(cfg, found):
     """The rule, and which of its clauses decided."""
     order = lambda row: (row['pool_size'], row['instance'])
-    enough = [row for row in found if row['b'] >= cfg['e1']['min_behaviours']]
-    varying = [row for row in enough if row['resource_values'] >= 2]
+    usable, enough, varying = _clauses(cfg, found)
     if varying:
-        return min(varying, key=order), 'behaviour count and a varying resource feature'
+        return min(varying, key=order), CLAUSES[0]
     if enough:
-        return min(enough, key=order), 'the behaviour count alone'
-    if found:
-        # No clause holds: the richest pool is still the best case study there is,
-        # and the note says the behaviour count was not met.
-        return sorted(found, key=lambda row: (-row['b'], *order(row)))[0], 'no clause applied'
-    return None, 'no pool of the configured domain and q'
+        return min(enough, key=order), CLAUSES[1]
+    if usable:
+        return sorted(usable, key=lambda row: (-row['b'], *order(row)))[0], CLAUSES[2]
+    return None, 'no usable pool of the configured domain and q'
 
 
 def tasks(cfg):
@@ -162,26 +202,39 @@ def run_task(task_id, cfg):
                       'chosen': chosen, 'models': records, 'selections': selections}}
 
 
-def _note(cfg, extra):
-    """The short markdown note the paper's subsection quotes."""
-    chosen, settings = extra.get('chosen'), cfg['e1']
+def _note(cfg, extra, ignored):
+    """The short markdown note the paper's subsection quotes: the numbers that
+    decided the instance, not the whole survey, which the result file holds."""
+    chosen, settings, survey = extra.get('chosen'), cfg['e1'], extra.get('survey', [])
     feature = chosen['resource_feature'] if chosen else None
+    usable, enough, varying = _clauses(cfg, survey)
+    # Only the smallest few candidates: on the full sweep the survey runs to
+    # dozens of pools and the note has to stay short enough to read.
+    shown = sorted(usable, key=lambda row: (row['pool_size'], row['instance']))[:3]
+    if chosen and chosen not in shown:
+        shown = [chosen, *shown[:2]]
     lines = ['# E1 -- reading the differences componentwise', '',
              f'Instance-selection rule: {RULE}.', '',
              f"Domain `{settings['domain']}` at q = {settings['q']}, min_behaviours = "
-             f"{settings['min_behaviours']}. Candidates surveyed:", '',
+             f"{settings['min_behaviours']}. Pools surveyed: {len(survey)}, of which "
+             f'{len(survey) - len(usable)} unusable; {len(enough)} reached min_behaviours and '
+             f'{len(varying)} of those also varied `{feature}`. The full survey is in the result '
+             'file; the smallest candidates are', '',
              f'| instance | pool | pool_size | b | distinct `{feature}` values |',
              '| --- | --- | --- | --- | --- |']
     lines += [f"| {row['instance']} | {row['pool_stem']} | {row['pool_size']} | {row['b']} "
-              f"| {row['resource_values']} |" for row in extra.get('survey', [])]
+              f"| {row['resource_values']} |" for row in shown]
     if chosen:
+        fallback = (f" No pool reached min_behaviours = {settings['min_behaviours']}, so the "
+                    'richest available was taken and this case study is weaker than the rule '
+                    'intends.' if extra['clause'] == CLAUSES[2] else '')
         lines += ['', f"Chosen: **{chosen['instance']}**, pool `{chosen['pool_stem']}` (pool_size "
                       f"{chosen['pool_size']}, b = {chosen['b']} under {chosen['model']}); the "
-                      f"clause that decided: {extra['clause']}.",
-                  f"The `{feature}` feature (the resource count, which on rovers is the rover "
-                  'count) is ' + ('CONSTANT here -- it takes one value, so no returned pair can '
-                                  'differ on it.' if chosen['resource_values'] < 2 else
-                                  f"not constant: it takes {chosen['resource_values']} values.")]
+                      f"clause that decided: {extra['clause']}.{fallback}",
+                  f"The `{feature}` feature (the model's resource feature, the rover count on "
+                  'rovers) is ' + ('CONSTANT here -- it takes one value, so no returned pair can '
+                                   'differ on it.' if chosen['resource_values'] < 2 else
+                                   f"not constant: it takes {chosen['resource_values']} values.")]
     lines += ['', f"k = {extra.get('k')}, kappa = {extra.get('kappa')}, the latter passed "
                   'explicitly to every indicator and every selection.',
               '', f'Tie-breaking: {reports.TIE_RULE}', '',
@@ -191,14 +244,30 @@ def _note(cfg, extra):
               + ', '.join(f"{f['key']} (weight {f['weight']}, {f['params']})"
                           for f in record['features'])
               + f", weights {record['weight_convention']}" for record in extra.get('models', [])]
+    lines += ['', 'One instance is the whole case study: '
+                  + (f"{len(ignored)} further result file(s) were read and left out of every "
+                     f"output here ({', '.join(ignored)})." if ignored else
+                     'one result file was read, and there was no other.')]
     return '\n'.join(lines) + '\n'
+
+
+def _primary(usable):
+    """The one result the case study is built from. E1 reports a single
+    instance, so a stale result file from an earlier pool set is left out rather
+    than concatenated into the tables: the newest result whose task is the one
+    its own survey chose wins."""
+    fresh = [r for r in usable
+             if r['task_id'] == ((r.get('extra') or {}).get('chosen') or {}).get('task_id')]
+    return max(fresh or usable, key=lambda r: (r.get('started') or '', r['task_id']))
 
 
 def report(cfg, results):
     """The three CSVs, the note, the two tables and the manifest."""
     out = reports.report_dir(cfg, 'e1')
     usable = [r for r in results if not r.get('error') and not r.get('extra', {}).get('skipped')]
-    rows = [row for result in usable for row in result['rows']]
+    primary = _primary(usable) if usable else None
+    rows = primary['rows'] if primary else []
+    ignored = [r['task_id'] for r in usable if r is not primary]
     kinds, written = {}, []
     for kind, (name, head, tail) in OUTPUTS.items():
         kinds[kind] = [row for row in rows if row['kind'] == kind]
@@ -206,7 +275,7 @@ def report(cfg, results):
         written.append(reports.write_csv(out / name, kinds[kind], [*head, *features, *tail]))
 
     note = out / 'e1_note.md'
-    note.write_text(_note(cfg, usable[0]['extra'] if usable else {}))
+    note.write_text(_note(cfg, primary['extra'] if primary else {}, ignored))
     written.append(note)
 
     tuple_of = lambda row: '; '.join(f'{key[2:]}={row[key]}' for key in sorted(row)
