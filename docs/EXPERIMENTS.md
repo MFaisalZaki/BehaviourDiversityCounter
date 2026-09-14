@@ -339,20 +339,29 @@ plan's mapping to the paper's Section 5 is produced, and dropping one would
 break an `\input` in the paper. The package is therefore over budget, and this
 is where the lines went:
 
-| Part | Code lines |
-|---|---|
-| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`) | about 1060 |
-| `reference.py` (the Phase 0 arbiter) | about 145 |
-| The six experiments | about 1230 |
+| Part | Code lines | Physical |
+|---|---|---|
+| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`) | 1091 | 1622 |
+| `reference.py` (the Phase 0 arbiter) | 146 | 221 |
+| The six experiments | 1394 | 1895 |
+| **Total** | **2631** | **3738** |
 
 Counting non-blank, non-comment, non-docstring lines. The six experiments
-average a little over 200 lines each, and each writes between five and seven
+average a little over 230 lines each, and each writes between four and eight
 files: a raw dump the reader can recompute from, one or two CSVs, a LaTeX
 table, one or two figures and a manifest. What was actually shared rather than
 repeated is in `runner.py` (the task grid, the standard setup, timed selection,
 the selection record, the nine mandatory row fields) and in `report.py` (CSV,
 booktabs, Holm, the two scipy tests, the pooled-and-macro summary rows,
 figures, the manifest).
+
+Each experiment module then grew again in the review pass that followed it, by
+between 30 and 80 lines, because two reviewers reading it against the plan
+found things that were missing rather than things that could go: the
+per-`(k, kappa)` constancy aggregate E2's claim actually turns on, a check file
+that could no longer read as green with nothing behind it, a series key that
+had been conflating two pools, a figure that plotted a ratio where the claim is
+about the value. Those are the lines the budget bought.
 
 ## Known limits
 
