@@ -183,6 +183,101 @@ The spec's digest (`model_hash`) is part of the behaviour dump's path, so a
 changed model is a changed path and nothing stale is read back. Add the model's
 row to the setup report by doing nothing: it is generated from the registry.
 
+## The output catalogue
+
+### Columns every row carries
+
+Nine fields identify the observation, and every CSV that reports per-pool rows
+begins with them.
+
+| Column | Meaning |
+|---|---|
+| `instance` | `<domain>/<ipc-year>/<problem-file-stem>` |
+| `domain` | the benchmark directory the instance came from |
+| `q` | the quality bound of the pool: plans cost at most `q * c*` |
+| `N` | plans **requested** of the planner (`pool_size` is what came back) |
+| `model` | the diversity model, or the resolution variant in E5 |
+| `k` | the selection size the row is about |
+| `kappa` | the B-Novelty neighbourhood, always explicit, never the library default |
+| `pool_size` | plans actually loaded, after the replay and cost filters |
+| `b` | distinct behaviours the pool exhibits under this model |
+
+`pool_stem` (`<mode>-q<q>-N<N>`) names the pool file. A behaviour is referred to
+by its index into `distinct` in the behaviour dump, and a plan by its index into
+the cost-sorted pool; a column holding several of either is a space-separated
+list, so it survives a CSV reader without quoting.
+
+### E1, `sec:exp-case`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e1_behaviours.csv` | `f_<feature>` — this behaviour's value for each feature of the model; `distinct` (its index), `plans` (how many exhibit it), `cheapest_cost` |
+| `e1_selections.csv` | `indicator` (which selection), `position` in the returned order, `plan` (pool index), `cost`, `distinct`, `f_<feature>`, `set_<indicator>` (all four indicators of the returned set), `wall_s`, `cpu_s` |
+| `e1_pairwise_diffs.csv` | `indicator`, `plan_i`, `plan_j`, `feature`, `value_i`, `value_j`, `differs`, `contribution` (this feature's `w_i psi_i` term), `psi` (the pair's `psi_M`), `differing_features` |
+
+`e1_note.md` states which instance the rule picked and why, whether the
+resource feature was constant on it, the k and kappa, and the tie rule.
+
+### E2, `sec:exp-separation`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e2_random_subsets.csv` | `part`, `indicator`, `n_subsets` drawn, `enumerated` (all `C(b,k)` rather than sampled), `n_values` distinct values seen, `constant` (the C2 question), `modal_fraction`, `min`, `max`, `mean` |
+| `e2_kendall.csv` | `pair` (`bmaxsum/bmaxmin` and the other two), `n_subsets`, `tau` (tau-b), `p`. Empty `tau` means undefined — an indicator was constant over the sample — and is left empty rather than written as zero |
+| `e2_cross.csv`, `e2_cross_macro.csv` | `selector` (rows), `scored_<indicator>` (columns): that selection's value under that indicator, over the best of the four on the same pool. `cells` is how many pools the mean is over. Restricted to `b > k` |
+| `e2_cross_all_pools.csv` | the same over every pool, `aggregate` naming pooled or macro. On `b <= k` pools every selection returns every behaviour, so the ratios are 1 by construction |
+
+### E3, `sec:exp-greedy`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e3_ratios.csv` | `indicator`, `greedy`, `optimal`, `ratio`, `optimum_exists`, `greedy_distinct`, `greedy_subset` and `optimal_subset` (behaviour indices, so the missed behaviours can be read off), `optimal_at_most` / `at_most_size` / `at_most_subset` / `at_most_exceeds` / `ratio_at_most` (B-MaxMin's at-most-k optimum, which feeds E4's fixed-size reading), `enum_wall_s`, `enum_cached`, `enum_at_most_wall_s`, `select_wall_s`, `select_cpu_s` |
+| `e3_summary.csv` | per `(indicator, k, kappa)`: `cases`, `rated` (cases with a defined ratio), `min`, `p5`, `median`, `at_optimum` (the fraction reaching it), `pooled_mean`, `macro_mean` |
+| `e3_worst_cases.csv` | the worst case of each `(indicator, k, kappa)` cell, with its pool named and `missed` listing the behaviours the optimum held and the greedy did not |
+| `e3_checks.json` | the blocking check: every B-Coverage ratio is exactly 1. `passed`, `cases`, `violations` |
+
+An empty `ratio` means the optimal value was zero or no optimum exists at that
+k — never a fabricated 1.
+
+### E4, `sec:exp-fixed-size`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e4_prefix_values.csv` | `indicator`, `k_max` (the single run the prefixes come from), `value` (through the library), `matrix_value` (recomputed from the behaviour dump), `gap` and `agrees` (the two must match), `previous`, `delta`, `fell`, `relative_fall` |
+| `e4_summary.csv` | per indicator: `series`, `steps`, `falls`, `fall_fraction`, `fall_fraction_macro`, `median_relative_fall`, `first_fall_series`, `never_falls_series`, `first_fall_k_median`, `first_fall_over_b_median`, `disagreements` (library against matrix), `monotone_check` (`ok`, or the violation for B-Coverage and B-MaxSum, which must never fall) |
+
+### E5, `sec:exp-resolution`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e5_resolution.csv` | `goal_cap`, `cost_bin_width`, `goal_atoms`, `goal_orders` (`m!`), `cost_bins`, `space_size` (`\|BS\|`, the product), `b_over_pool`, `b_over_space`, `saturated` (every plan its own behaviour), `cost_bin_degenerate` (one bin, so the feature is constant — which is what `q = 1` gives), `indicator` and the four indicator values of that selection, `wall_s`, `cpu_s` |
+| `e5_summary.csv` | per `(domain, goal_cap, cost_bin_width)`: `pools`, `b_median` with its quartiles and range, `b_pooled_mean`, `b_macro_mean`, `space_size_median`, `b_over_space_*`, `b_over_pool_median`, `cpu_s_median`, `saturated_pools`, `degenerate_cost_bin_pools` |
+
+### E6, `sec:exp-cost`
+
+| File | Columns beyond the nine |
+|---|---|
+| `e6_timing.csv` | one row per sample, not per median: `features` (how many the model has, the `n` of the cost expression), `phase` (`mapping` or `selection`), `indicator`, `repeat`, `wall_s`, `cpu_s`, `generation_wall_s` and `generation_cpu_s` from the pool record, `wall_over_generation`, `cpu_over_generation`, `exhausted` |
+| `e6_medians.csv` | per `(N, k, features, phase, indicator)`: `samples`, `wall_median` with quartiles, `cpu_median` with quartiles, `cpu_pooled_mean`, `cpu_macro_mean`, `pool_size_median`, `b_median`, the two generation medians and the two ratios |
+
+Only the wall-clock comparison against generation is like for like: the pool
+record measures the planner subprocess with the parent's `process_time` as
+well, so `generation_cpu_s` excludes the planner's own CPU. Both are in the
+CSV; the table and the figure use the wall clock.
+
+### Setup, `sec:exp-setup`
+
+| File | Columns |
+|---|---|
+| `benchmark.csv` | `domain`, `ipc_year`, `instances`, `pools`, `pools_q<q>` per quality bound, `exhausted`, `timed_out`, `empty`, `plans` |
+| `models.csv` | `model`, `domains`, `feature`, `description`, `params`, `dimension_size_rule`, `dissimilarity`, `weight` |
+
+Each experiment also writes `manifest.json`: the git revision and whether the
+tree was dirty, the config path and hash, the benchmark's pinned and actual
+commit, the planner and the exact search strings, the limits, the seed, package
+versions, the Python and platform, the tie-breaking rule, the task counts
+(ok / failed / skipped), every failure with its message, and every output path.
+
 ## Recomputing a number from the raw dumps
 
 Ground rule: no row holds a number that cannot be recomputed from the same
