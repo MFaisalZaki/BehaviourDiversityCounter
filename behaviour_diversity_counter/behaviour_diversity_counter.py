@@ -12,6 +12,7 @@ from behaviour_diversity_counter.dimensions.resources import (
 from behaviour_diversity_counter.dimensions.cost_bin import CostBinDimension
 from behaviour_diversity_counter.dimensions.utility_value import UtilityValueDimension
 from behaviour_diversity_counter.dimensions.functions import NumericFunctionDimension
+from behaviour_diversity_counter.dimensions.stability import StabilityDimension
 
 dimensions_map = {
     'go': GoalPredicatesOrderingDimension,
@@ -22,6 +23,7 @@ dimensions_map = {
     'uv': UtilityValueDimension,
     'fn': NumericFunctionDimension,
     'cbin': CostBinDimension,
+    'stability': StabilityDimension,
 }
 
 #: How many nearest neighbours B-Novelty averages over.
@@ -190,15 +192,12 @@ class BehaviourDiversityCounter:
     def _extract_b_coverage(self, plans, k):
         """One plan per behaviour, the cheapest exhibiting it, then pad.
 
-        No distances are read, so this never builds the matrix the other three
-        rules open on. Nor is the scan a heuristic: every plan covers exactly
-        one behaviour, which is what makes greedy selection exact here and
-        approximate everywhere else (Thm. bcov-greedy).
-
-        Which plan represents a behaviour is left open by the theorem, and the
-        paper takes the cheapest plan in the pool that exhibits it, as
-        MAP-Elites keeps the fittest solution per cell; ties fall to the
-        earliest plan. Behaviours are taken in first-occurrence order.
+        The paper's Alg. extract-bc: a pass over the pool that keeps, for each
+        behaviour, the cheapest plan exhibiting it, as MAP-Elites retains the
+        best solution per cell; ties fall to the earliest plan. No distances
+        are read, so this never builds the matrix the other three rules open
+        on. Behaviours are taken in first-occurrence order, and once every
+        behaviour is held the remaining slots are filled in pool order.
         """
         if k <= 0 or not plans:
             return []

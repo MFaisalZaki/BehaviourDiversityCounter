@@ -367,7 +367,7 @@ class TestSelectorsHonourTheirIndicators:
         assert counter.b_maxsum(selected) == pytest.approx(1.0)
 
     def test_coverage_selection_keeps_the_cheapest_plan_per_behaviour(self, counter):
-        """Which plan represents a behaviour is left open by Thm. bcov-greedy;
+        """Which plan represents a behaviour is left open by the paper;
         the paper takes the cheapest one in the pool, as MAP-Elites keeps the
         fittest solution per cell. Pool order is not cost order here."""
         dear, cheap, other = counter.make_plans((1, 'RSI', 9), (1, 'RSI', 2), (2, 'SIR', 5))

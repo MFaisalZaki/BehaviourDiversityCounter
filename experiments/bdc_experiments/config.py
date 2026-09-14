@@ -42,15 +42,11 @@ KEYS = {
     },
     'models': {
         'generic': (dict, True),
-        'enabled': (list, False),
+        'stability': (dict, False),     # no knobs: the entry only says the model is in play
     },
-    'e1': {'domain': (str, True), 'q': (float, True), 'min_behaviours': (int, True),
-           'k': (int, True), 'kappa': (int, True)},
-    'e2': {'subsets': (int, True)},
-    'e3': {'k_values': (list, True), 'behaviour_range': (list, True)},
-    'e4': {'k_range': (list, True)},
-    'e5': {'goal_caps': (list, True), 'cost_bin_widths': (list, True), 'k': (int, True)},
-    'e6': {'pool_sizes': (list, True), 'repeats': (int, True), 'feature_counts': (list, True)},
+    'e1': {'domains': (list, True), 'min_behaviours': (int, True)},
+    'e2': {'random_subsets': (int, True), 'weight_settings': (list, True)},
+    'e3': {'pool_sizes': (list, True), 'repeats': (int, True)},
 }
 
 #: Configs shipped with the package, so `bdcexp run smoke e3` works anywhere.
@@ -107,10 +103,6 @@ def _validate(cfg, source):
                     raise ValueError(f'{source}: missing key {key} in [{section}]')
                 continue
             value = cfg[section][key]
-            # A whole number written without a point is an int to tomllib; the
-            # config means it as the float it stands for.
-            if kind is float and isinstance(value, int) and not isinstance(value, bool):
-                cfg[section][key] = value = float(value)
             if not isinstance(value, kind) or isinstance(value, bool) != (kind is bool):
                 raise ValueError(f'{source}: [{section}].{key} should be {kind.__name__}, '
                                  f'got {type(value).__name__}')

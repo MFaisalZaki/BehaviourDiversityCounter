@@ -6,8 +6,8 @@ paper's definitions. This note lists every check, its outcome, the one library
 fix the audit produced, and the tie-breaking rule the evaluation reports.
 
 The reference is `experiments/bdc_experiments/reference.py`: the four
-indicators, their exhaustive optima and the four extraction rules, standard
-library only, no rounding, written from the definitions of the paper alone by
+indicators, the four extraction rules and the stability distance of the
+literature's model, standard library only, no rounding, written from the definitions of the paper alone by
 an author who had not read the library's implementation of the same functions.
 The audit itself is `tests/experiments/test_audit.py`, over random behaviour
 spaces built in `tests/experiments/conftest.py`: 2 to 4 dimensions of 2 to 6
@@ -37,6 +37,8 @@ emit its plans in.
 | 4 | Twinning: adding a plan whose behaviour is already held leaves all four indicators exactly unchanged | pass |
 | 5 | B-Coverage and B-MaxSum never fall as a plan is added; B-MaxMin and B-Novelty have counterexamples in the sample | pass, counterexample quoted below |
 | 6 | Extraction returns exactly `min(k, |C|)` plans even when the indicator fell during selection | pass |
+| 7 | Every per-dimension dissimilarity of every model, `stability` included, is zero only on equal values, over every pair of values the dimension takes on the smoke pools (Def. feature's definiteness) | pass |
+| 8 | The stability model on the transport fixture: `b` is the number of distinct action sets, `psi_M` equals `ref_stability` on every pair, and B-MaxSum selection under it equals `ref_extract_bmaxsum` with `ref_stability` as `d`; the same comparison over the committed smoke pools includes the stability model | pass |
 
 Every one of those calls passes `k_nn` explicitly. The library's
 `DEFAULT_K_NN = 3` is never relied on anywhere in the evaluation: the paper
@@ -57,7 +59,7 @@ counterexamples, and the first one found is the same step for both:
 The new behaviour lands 0.0515 from `('v0','v2')`, nearer than the 0.6255
 separating the original pair, so the minimum over pairs collapses and every
 behaviour's nearest-neighbour mean falls with it. This is claim C4 in
-miniature, and E4 measures how often it happens on real pools.
+miniature; the paper reads both indicators at a fixed set size.
 
 ## The library fix
 
@@ -156,7 +158,20 @@ end to end by `tests/experiments/test_experiments_smoke.py` and by the
 library-against-reference comparison that the audit runs on the committed
 smoke pools.
 
-The dimension docstrings still cite theorem names ("Thm. bcov-greedy",
-"Prop. separable", "Def. separable-distance") that no longer exist in the
-paper under revision. They were left alone: the plan says the author will sync
-them, and renaming them here would only make the two drift differently.
+## The stability model
+
+`dimensions/stability.py` is the literature's model stated as one feature:
+the extracting function reads a plan's action *set*, the dimension is the set
+of such sets, and the dissimilarity is the stability distance of Srivastava
+et al. (2007). It is definite on action sets, as Def. feature requires, so
+two plans are twins under it exactly when they have the same action set; it
+is not a metric-based model in the paper's sense, since two orderings of one
+action set are at distance zero. Check 8 confirms that `extract_BMaxSum`
+under it is the post-hoc greedy of Katz and Sohrabi (2020) with the same tie
+rule. On the committed driverlog and rovers pools every plan is a permutation
+of one action set, so the stability model sees one behaviour where the feature
+models see six or eight; the case study's stability reading shows this.
+
+The library's `_extract_b_coverage` docstring no longer cites the retired
+optimality theorem; the paper (2026-09-14) makes no claim about the selection
+functions, and the audit compares them with the reference rules only.

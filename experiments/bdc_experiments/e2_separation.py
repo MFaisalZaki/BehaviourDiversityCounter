@@ -1,11 +1,13 @@
-"""E2: whether the three dissimilarity-based indicators separate plan sets that
-B-Coverage scores alike.
+"""E2 -- whether the three dissimilarity-based indicators separate plan sets
+that B-Coverage scores alike.
 
-Part A draws random subsets of exactly k distinct behaviours -- so B-Coverage
-is constant over the sample by construction -- and scores each under all four
-indicators. Part B runs the four selections on the same pools and scores each
-returned set under all four indicators, which gives the selecting-by-scoring
-cross table.
+Part A is selection-free: random subsets of exactly k of a pool's behaviours,
+drawn here from the behaviour dump and scored off its matrix, so B-Coverage is
+constant over the sample by construction. Part B reads the four selections at
+each k off the recorded runs and scores each returned set under all four
+indicators. Part C repeats part B on rovers under the astronaut's model at
+each further weight setting, to see whether the weights change the selected
+sets or only their values.
 """
 
 import math
@@ -17,354 +19,237 @@ from itertools import combinations
 from bdc_experiments import models, runner
 from bdc_experiments import report as rp
 
-#: The pairs of dissimilarity-based indicators whose rankings are compared.
 PAIRS = ('bmaxsum/bmaxmin', 'bmaxsum/bnovelty', 'bmaxmin/bnovelty')
-
-BASE = ['instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b']
-
-#: A pool cell of the paired comparisons, as the plan fixes it.
-CELL = ('instance', 'q', 'N', 'model', 'k', 'kappa')
+BASE = list(runner.BASE_FIELDS)
 
 #: Two subset scores count as one value within this tolerance: they are sums of
-#: the same rationals in a different order, so bit equality is too strict a
-#: reading of "the indicator is constant across the sample".
+#: the same rationals in a different order.
 DIGITS = 12
 
 
-def _draw(cfg, task_id, b, k):
-    """``(subsets, enumerated)``: up to ``[e2].subsets`` distinct k-subsets of
-    the b behaviours, or all C(b, k) of them when there are no more than that.
-
-    The seed is the repr of (run seed, task id, k) -- random.Random takes no
-    tuple -- so a rerun draws the same subsets.
-    """
-    wanted = cfg['e2']['subsets']
+def _draw(cfg, result, k):
+    """``(subsets, enumerated)``: up to ``[e2].random_subsets`` distinct k-subsets
+    of the b behaviours, or all C(b, k) when there are no more than that.
+    Seeded from the run seed and the pool, model and k, so a rerun redraws them."""
+    b, wanted = len(result['dump']['distinct']), cfg['e2']['random_subsets']
     if math.comb(b, k) <= wanted:
-        return [list(subset) for subset in combinations(range(b), k)], True
-    rng, drawn = random.Random(repr((cfg['run']['seed'], task_id, k))), {}
+        return [list(s) for s in combinations(range(b), k)], True
+    pool = result['pool']
+    rng = random.Random(repr((cfg['run']['seed'], pool['instance'], pool['pool_stem'],
+                              result['model']['name'], k)))
+    drawn = {}
     while len(drawn) < wanted:
         drawn.setdefault(tuple(sorted(rng.sample(range(b), k))), None)
-    return [list(subset) for subset in drawn], False
+    return [list(s) for s in drawn], False
 
 
-def _subset_rows(base, k, kappas, scores, enumerated):
-    """One row per (kappa, indicator): how the sample's values spread, and
-    whether the indicator is constant over it."""
-    rows = []
-    for kappa in kappas:
-        for indicator in runner.INDICATORS:
-            values = (scores['bnovelty'][str(kappa)] if indicator == 'bnovelty'
-                      else scores[indicator])
-            counts = Counter(round(value, DIGITS) for value in values)
-            rows.append({**base, 'k': k, 'kappa': kappa, 'part': 'subsets',
-                         'indicator': indicator, 'n_subsets': len(values),
-                         'enumerated': enumerated, 'n_values': len(counts),
-                         'constant': len(counts) == 1,
-                         'modal_fraction': max(counts.values()) / len(values),
-                         'min': min(values), 'max': max(values),
-                         'mean': statistics.fmean(values)})
-    return rows
-
-
-def _selection(counter, loaded, dump, k, indicator, kappa):
-    """``(entry, selected)``: one selection, dumped whole. The caller fills in
-    the four indicator values it scores at this kappa."""
-    selected, wall, cpu = runner.select(counter, loaded['plans'], k, indicator, kappa)
-    return ({'k': k, 'kappa': kappa, 'indicator': indicator, 'values': None,
-             'kappa_free': indicator != 'bnovelty',
-             'selection': runner.selection_record(loaded, dump, selected, wall, cpu)},
-            selected)
-
-
-def run_task(task_id, cfg):
-    """Part A (random equal-count subsets) and part B (the four selections)."""
-    ctx = runner.context(cfg, task_id)
-    spec = models.registry(cfg)[ctx['extra'][0]]
-    task, counter, loaded, model_record, dump = runner.setup(cfg, ctx, spec)
-    plans, b, record = loaded['plans'], len(dump['distinct']), loaded['record']
-    if not plans:
-        return {'pool': record, 'model': model_record, 'rows': [],
-                'extra': {'skipped': 'the pool loaded no plans, so there is nothing to score'}}
-
-    kappas = cfg['selection']['kappa_values']
-    base = {'instance': record['instance'], 'domain': record['domain'], 'q': record['q'],
-            'N': record['requested'], 'model': spec.name, 'pool_size': len(plans), 'b': b}
-    representative = {}                        # distinct behaviour -> a plan exhibiting it
-    for entry in dump['plans']:
-        representative.setdefault(entry['distinct'], entry['index'])
-
-    rows, subsets, selections = [], [], []
-    for k in cfg['selection']['k_values']:
-        if b > k:                              # at b <= k the only subset is every behaviour
-            sets, enumerated = _draw(cfg, task_id, b, k)
-            scores = {name: [] for name in ('bcoverage', 'bmaxsum', 'bmaxmin')}
-            scores['bnovelty'] = {str(kappa): [] for kappa in kappas}
-            for subset in sets:
-                chosen = [plans[representative[index]] for index in subset]
-                for kappa in kappas:
-                    values = runner.indicators(counter, chosen, kappa)
-                    scores['bnovelty'][str(kappa)].append(values['bnovelty'])
-                    if kappa == kappas[0]:
-                        for name in ('bcoverage', 'bmaxsum', 'bmaxmin'):
-                            scores[name].append(values[name])
-            subsets.append({'k': k, 'b': b, 'enumerated': enumerated, 'sets': sets,
-                            'scores': scores})
-            rows.extend(_subset_rows(base, k, kappas, scores, enumerated))
-        fixed = {}                             # only B-Novelty's greedy step reads kappa, so
-        for indicator in runner.INDICATORS:    # the other three are selected once per k
-            if indicator != 'bnovelty':
-                fixed[indicator] = (*_selection(counter, loaded, dump, k, indicator, kappas[0]),
-                                    len(selections))
-                selections.append(fixed[indicator][0])
-        for kappa in kappas:
-            for indicator in runner.INDICATORS:
-                if indicator in fixed:
-                    entry, selected, at = fixed[indicator]
-                else:
-                    entry, selected = _selection(counter, loaded, dump, k, indicator, kappa)
-                    at = len(selections)
-                    selections.append(entry)
-                values = runner.indicators(counter, selected, kappa)
-                if entry['kappa'] == kappa:
-                    entry['values'] = values
-                else:                          # the same set, scored at a further kappa
-                    selections.append({'k': k, 'kappa': kappa, 'indicator': indicator,
-                                       'kappa_free': True, 'values': values,
-                                       'same_selection_as': at})
-                rows.append({**base, 'k': k, 'kappa': kappa, 'part': 'selection',
-                             'selector': indicator, 'selected': len(selected),
-                             'selected_distinct': len(set(entry['selection']['distinct'])),
-                             'wall_s': entry['selection']['wall_s'],
-                             'cpu_s': entry['selection']['cpu_s'],
-                             **{f'score_{name}': value for name, value in values.items()}})
-
-    return {'pool': record, 'model': model_record, 'rows': rows,
-            'extra': {'subsets': subsets, 'selections': selections,
-                      'seeding': 'random.Random(repr((run seed, task id, k)))',
-                      'kappa_free': 'B-Coverage, B-MaxSum and B-MaxMin do not read kappa: each is '
-                                    'selected once per k and scored at every kappa, so its later '
-                                    'kappas are dumped as scores naming the selection they reuse '
-                                    'by its index in this list'}}
-
-
-# ----------------------------------------------------------------------
-# Report
-# ----------------------------------------------------------------------
-
-def _constancy(rows):
-    """Per (k, kappa, indicator): the pool cells sampled, the fraction of them
-    on which the indicator took a single value over the whole sample, and the
-    mean modal fraction. The B-Coverage line is the construction check."""
-    out = []
-    for keys, cells in rp.group(rows, ['k', 'kappa', 'indicator']).items():
-        out.append({'part': 'aggregate', **dict(zip(('k', 'kappa', 'indicator'), keys)),
-                    'cells': len(cells),
-                    'constant_fraction': sum(r['constant'] for r in cells) / len(cells),
-                    'mean_modal_fraction': statistics.fmean(r['modal_fraction'] for r in cells)})
-    return out
-
-
-def _taus(results):
-    """Kendall tau-b between each pair of dissimilarity indicators over the
-    subsets drawn on one pool: a row per (pool, model, k, kappa, pair).
-
-    ``enumerated`` marks the pools where the sample is every k-subset there is;
-    the tau is then the population value and no sampling p-value applies."""
-    rows = []
+def _subsets(cfg, results):
+    """Part A: per-subset scores, the per-(k, kappa, indicator) spread, and the taus."""
+    kappas, drawn, rows, taus = cfg['selection']['kappa_values'], [], [], []
     for result in results:
-        pool = result['pool']
-        head = {'instance': pool['instance'], 'domain': pool['domain'], 'q': pool['q'],
-                'N': pool['requested'], 'model': result['model']['name'],
-                'pool_size': pool['size']}
-        for block in result.get('extra', {}).get('subsets', []):
-            for kappa in sorted(int(key) for key in block['scores']['bnovelty']):
-                values = dict(block['scores'], bnovelty=block['scores']['bnovelty'][str(kappa)])
+        for k in cfg['selection']['k_values']:
+            if len(result['dump']['distinct']) <= k:      # the only k-subset is every behaviour
+                continue
+            subsets, enumerated = _draw(cfg, result, k)
+            scores = {kappa: [rp.score(result['dump'], s, kappa) for s in subsets] for kappa in kappas}
+            drawn += [{**rp.head(result, k), 'subset': ' '.join(map(str, s)),
+                       **{n: scores[kappas[0]][i][n] for n in runner.INDICATORS[:3]},
+                       **{f'bnovelty_kappa{kappa}': scores[kappa][i]['bnovelty'] for kappa in kappas}}
+                      for i, s in enumerate(subsets)]
+            for kappa in kappas:
+                for indicator in runner.INDICATORS:
+                    values = [s[indicator] for s in scores[kappa]]
+                    counts = Counter(round(v, DIGITS) for v in values)
+                    rows.append({**rp.head(result, k, kappa), 'indicator': indicator,
+                                 'n_subsets': len(values), 'enumerated': enumerated,
+                                 'n_values': len(counts), 'constant': len(counts) == 1,
+                                 'modal_fraction': max(counts.values()) / len(values),
+                                 'min': min(values), 'max': max(values),
+                                 'mean': statistics.fmean(values)})
                 for pair in PAIRS:
                     first, second = pair.split('/')
-                    tau, p = rp.kendall(values[first], values[second])
-                    rows.append({**head, 'k': block['k'], 'kappa': kappa, 'b': block['b'],
-                                 'pair': pair, 'n_subsets': len(block['sets']),
-                                 'enumerated': block['enumerated'], 'tau': tau,
-                                 'p': None if block['enumerated'] else p})
-    return rows
+                    tau, p = rp.kendall([s[first] for s in scores[kappa]],
+                                        [s[second] for s in scores[kappa]])
+                    taus.append({**rp.head(result, k, kappa), 'pair': pair,
+                                 'n_subsets': len(subsets), 'enumerated': enumerated,
+                                 'tau': tau, 'p': None if enumerated else p})
+    return drawn, rows, taus
 
 
-def _macro_spread(rows, key='tau'):
-    """The mean over domains of each domain's median and quartiles: report.macro
-    averages the per-domain means, and the spread is averaged the same way."""
-    per_domain = {}
-    for row in rows:
-        if row[key] is not None:
-            per_domain.setdefault(row['domain'], []).append(row[key])
-    spreads = [rp.summarise(values) for values in per_domain.values()]
-    return {f'macro_{name}': statistics.fmean([s[name] for s in spreads]) if spreads else None
-            for name in ('median', 'q1', 'q3')}
+def _constancy(rows):
+    """Per (k, kappa, indicator): on what fraction of the pools the indicator
+    took a single value over the whole sample. B-Coverage is the check."""
+    return [{'k': k, 'kappa': kappa, 'indicator': indicator, 'cells': len(cell),
+             'constant_fraction': sum(r['constant'] for r in cell) / len(cell),
+             'mean_modal_fraction': statistics.fmean(r['modal_fraction'] for r in cell)}
+            for (k, kappa, indicator), cell in rp.group(rows, ('k', 'kappa', 'indicator')).items()]
 
 
-def _tau_summary(rows):
+def _tau_summary(taus):
     """Median and IQR pooled and macro, and the fraction of pools with a
-    negative tau, per (pair, k, kappa). A tau is missing where an indicator was
-    constant over the sample and the correlation is undefined."""
+    negative tau, per (pair, k, kappa). A tau is missing where an indicator
+    was constant over the sample and the correlation is undefined."""
     out = []
-    for pair in PAIRS:
-        for k, kappa in sorted({(row['k'], row['kappa']) for row in rows}):
-            group = [r for r in rows if (r['pair'], r['k'], r['kappa']) == (pair, k, kappa)]
-            known = [r for r in group if r['tau'] is not None]
-            spread = rp.summarise([r['tau'] for r in group])
-            out.append({'pair': pair, 'k': k, 'kappa': kappa, 'n': spread['n'],
-                        'undefined': len(group) - len(known), 'median': spread['median'],
-                        'q1': spread['q1'], 'q3': spread['q3'], **_macro_spread(known),
-                        'negative_fraction': (sum(r['tau'] < 0 for r in known) / len(known)
-                                              if known else None)})
+    for (pair, k, kappa), cell in sorted(rp.group(taus, ('pair', 'k', 'kappa')).items()):
+        known = [r for r in cell if r['tau'] is not None]
+        spread = rp.summarise([r['tau'] for r in known])
+        per_domain = [rp.summarise([r['tau'] for r in members])
+                      for _, members in rp.group(known, ('domain',)).items()]
+        out.append({'pair': pair, 'k': k, 'kappa': kappa, 'n': spread['n'],
+                    'undefined': len(cell) - len(known), 'median': spread['median'],
+                    'q1': spread['q1'], 'q3': spread['q3'],
+                    **{f'macro_{s}': (statistics.fmean(d[s] for d in per_domain) if per_domain else None)
+                       for s in ('median', 'q1', 'q3')},
+                    'negative_fraction': (sum(r['tau'] < 0 for r in known) / len(known)
+                                          if known else None)})
     return out
 
 
-def _cross(results):
-    """Each selection's value under each scoring indicator, over the best of
+def _cross(cfg, results):
+    """Part B: each selection's value under each indicator, over the best of
     the four selections on the same pool, k and kappa."""
     rows = []
     for result in results:
-        cells = {}
-        for row in result['rows']:
-            if row['part'] == 'selection':
-                cells.setdefault((row['k'], row['kappa']), []).append(row)
-        for group in cells.values():
-            for scorer in runner.INDICATORS:
-                best = max(row[f'score_{scorer}'] for row in group)
-                for row in group:
-                    rows.append({**{key: row[key] for key in BASE},
-                                 'selector': row['selector'], 'scorer': scorer,
-                                 'value': row[f'score_{scorer}'], 'best': best,
-                                 # all four score zero: the ratio is missing, not 1
-                                 'ratio': row[f'score_{scorer}'] / best if best > 0 else None,
-                                 'discriminating': row['b'] > row['k']})
+        for k in cfg['selection']['k_values']:
+            for kappa in cfg['selection']['kappa_values']:
+                scored = {s: rp.score(result['dump'], rp.entry(result, s, kappa)['distinct'][:k], kappa)
+                          for s in runner.INDICATORS}
+                for selector, values in scored.items():
+                    for scorer in runner.INDICATORS:
+                        best = max(v[scorer] for v in scored.values())
+                        rows.append({**rp.head(result, k, kappa), 'selector': selector,
+                                     'scorer': scorer, 'value': values[scorer], 'best': best,
+                                     'ratio': values[scorer] / best if best > 0 else None,
+                                     'discriminating': len(result['dump']['distinct']) > k})
     return rows
 
 
-def _cells(rows):
-    """The distinct pool cells some rows come from."""
-    return {tuple(row[key] for key in CELL) for row in rows}
-
-
-def _matrix(rows, statistic):
-    """selector x scorer means of the ratio, per (k, kappa) and over all of them.
-
-    Each scorer carries its own cell count, because a pool on which all four
-    selections score zero contributes no ratio to that scorer; ``b_le_k_cells``
-    counts the cells where every selection returns every behaviour."""
+def _matrix(rows, statistic, pools):
+    """selector x scorer means of the ratio, per (k, kappa) and over all of them."""
     out = []
-    for k, kappa in sorted({(row['k'], row['kappa']) for row in rows}) + [('all', 'all')]:
+    for k, kappa in sorted({(r['k'], r['kappa']) for r in rows}) + [('all', 'all')]:
         block = rows if k == 'all' else [r for r in rows if (r['k'], r['kappa']) == (k, kappa)]
         for selector in runner.INDICATORS:
-            mine = [row for row in block if row['selector'] == selector]
-            entry = {'k': k, 'kappa': kappa, 'selector': selector,
-                     'b_le_k_cells': len(_cells([r for r in mine if not r['discriminating']]))}
+            mine = [r for r in block if r['selector'] == selector]
+            entry = {'k': k, 'kappa': kappa, 'selector': selector, 'pools': pools}
             for scorer in runner.INDICATORS:
                 scored = [r for r in mine if r['scorer'] == scorer]
                 entry[f'scored_{scorer}'] = statistic(scored, 'ratio')
-                entry[f'n_{scorer}'] = len(_cells([r for r in scored if r['ratio'] is not None]))
+                entry[f'n_{scorer}'] = sum(1 for r in scored if r['ratio'] is not None)
             out.append(entry)
     return out
 
 
-def _figure(rows, path):
+def _weights(cfg, base_name):
+    """Part C: the astronaut's model at each further weight setting against
+    the declared one, on the same pools: is the returned set the same?"""
+    variants = {v.name: v for v in models.weight_variants(cfg)}
+    grouped = rp.by_pool(rp.selections(cfg, keep=lambda name: name == base_name or name in variants))
+    rows = []
+    for found in grouped.values():
+        if base_name not in found:
+            continue
+        base = found[base_name]
+        for name, other in found.items():
+            if name == base_name:
+                continue
+            for k in cfg['selection']['k_values']:
+                for kappa in cfg['selection']['kappa_values']:
+                    for indicator in runner.INDICATORS:
+                        mine = rp.entry(base, indicator, kappa)
+                        theirs = rp.entry(other, indicator, kappa)
+                        a = {tuple(t) for t in mine['behaviours'][:k]}
+                        b = {tuple(t) for t in theirs['behaviours'][:k]}
+                        rows.append({**rp.head(base, k, kappa), 'setting': name,
+                                     'weights': ' '.join(str(f['weight']) for f in other['model']['features']),
+                                     'indicator': indicator, 'same_set': a == b,
+                                     'jaccard': len(a & b) / len(a | b),
+                                     'value_declared': rp.score(base['dump'], mine['distinct'][:k], kappa)[indicator],
+                                     'value_setting': rp.score(other['dump'], theirs['distinct'][:k], kappa)[indicator]})
+    return rows
+
+
+def _figure(taus, path):
     """The distribution of tau per indicator pair and k, kappas pooled."""
     fig, ax = rp.figure(size=(6.0, 3.4))
-    ks = sorted({row['k'] for row in rows})
-    width = 0.8 / max(len(ks), 1)
-    for offset, k in enumerate(ks):
-        colour = rp.PALETTE[offset % len(rp.PALETTE)]
-        samples = {index: [r['tau'] for r in rows
-                           if r['pair'] == pair and r['k'] == k and r['tau'] is not None]
-                   for index, pair in enumerate(PAIRS)}
-        samples = {index: values for index, values in samples.items() if values}
-        if samples:
-            drawn = ax.boxplot(list(samples.values()), patch_artist=True, manage_ticks=False,
-                               widths=width * 0.8,
-                               positions=[index + (offset - (len(ks) - 1) / 2) * width
-                                          for index in samples])
-            for box in drawn['boxes']:
-                box.set_facecolor(colour)
-            for median in drawn['medians']:
-                median.set_color('black')
-        ax.plot([], [], color=colour, linewidth=6, label=f'k = {k}')
+    ks = sorted({r['k'] for r in taus})
+    rp.boxes(ax, PAIRS, ks, lambda pair, k: [r['tau'] for r in taus
+                                              if r['pair'] == pair and r['k'] == k and r['tau'] is not None])
     ax.axhline(0.0, color='grey', linewidth=0.8)
-    ax.set_xticks(range(len(PAIRS)))
-    ax.set_xticklabels(PAIRS)
     ax.set_ylabel('Kendall tau-b')
     if ks:
-        ax.legend(loc='lower right', fontsize='small')
+        ax.legend(title='k', loc='lower right', fontsize='small')
     return rp.save(fig, path)
 
 
-def report(cfg, results):
-    """Every CSV, table and figure of E2, from the result files alone."""
+def report(cfg):
+    results = rp.selections(cfg, keep=models.is_primary)
+    drawn, subsets, taus = _subsets(cfg, results)
+    constancy, tau_summary = _constancy(subsets), _tau_summary(taus)
+    cross = _cross(cfg, results)
+    main = [r for r in cross if r['discriminating']]
+    weights = _weights(cfg, models.PER_DOMAIN[0].name)
+    weight_summary = [{'setting': s, 'k': k, 'kappa': kappa, 'indicator': i, 'pools': len(cell),
+                       'same_set_fraction': rp.pooled(cell, 'same_set'),
+                       'jaccard_mean': rp.pooled(cell, 'jaccard')}
+                      for (s, k, kappa, i), cell in rp.group(weights, ('setting', 'k', 'kappa', 'indicator')).items()]
     out = rp.report_dir(cfg, 'e2')
-    usable = [r for r in results if not r.get('error') and not r.get('extra', {}).get('skipped')]
-    subsets = [row for r in usable for row in r['rows'] if row['part'] == 'subsets']
-    taus, cross = _taus(usable), _cross(usable)
-    summary, constancy = _tau_summary(taus), _constancy(subsets)
-    main = [row for row in cross if row['discriminating']]
-    columns = (['k', 'kappa', 'selector'] + [f'scored_{n}' for n in runner.INDICATORS]
+    columns = (['k', 'kappa', 'selector', 'pools'] + [f'scored_{n}' for n in runner.INDICATORS]
                + [f'n_{n}' for n in runner.INDICATORS])
-
     written = [
-        # The aggregate block answers the headline question of part A: on what
-        # share of the pool cells does each indicator vary over the sample?
         rp.write_csv(out / 'e2_random_subsets.csv', subsets + constancy,
-                     BASE + ['part', 'indicator', 'n_subsets', 'enumerated', 'n_values',
-                             'constant', 'modal_fraction', 'min', 'max', 'mean',
-                             'cells', 'constant_fraction', 'mean_modal_fraction']),
-        rp.write_csv(out / 'e2_kendall.csv', taus,
-                     BASE + ['pair', 'n_subsets', 'enumerated', 'tau', 'p']),
-        rp.write_csv(out / 'e2_cross.csv', _matrix(main, rp.pooled), columns),
-        rp.write_csv(out / 'e2_cross_macro.csv', _matrix(main, rp.macro), columns),
-        rp.write_csv(out / 'e2_cross_all_pools.csv',
-                     [{**row, 'aggregate': name} for name, statistic in
-                      (('pooled', rp.pooled), ('macro', rp.macro))
-                      for row in _matrix(cross, statistic)],
-                     columns + ['b_le_k_cells', 'aggregate']),
+                     BASE + ['indicator', 'n_subsets', 'enumerated', 'n_values', 'constant',
+                             'modal_fraction', 'min', 'max', 'mean', 'cells', 'constant_fraction',
+                             'mean_modal_fraction']),
+        rp.write_csv(out / 'e2_subsets.csv', drawn),
+        rp.write_csv(out / 'e2_kendall.csv', taus, BASE + ['pair', 'n_subsets', 'enumerated', 'tau', 'p']),
+        rp.write_csv(out / 'e2_cross.csv', _matrix(main, rp.pooled, 'b>k') + _matrix(cross, rp.pooled, 'all'), columns),
+        rp.write_csv(out / 'e2_cross_macro.csv', _matrix(main, rp.macro, 'b>k') + _matrix(cross, rp.macro, 'all'), columns),
+        rp.write_csv(out / 'e2_weights.csv', weights + weight_summary,
+                     BASE + ['setting', 'weights', 'indicator', 'same_set', 'jaccard', 'value_declared',
+                             'value_setting', 'pools', 'same_set_fraction', 'jaccard_mean']),
         rp.table(out / 'tables' / 'e2_kendall.tex', 'tab:e2-kendall',
                  'Kendall $\\tau_b$ between the rankings the dissimilarity-based indicators give '
                  'the random equal-count subsets of one pool: median and interquartile range over '
                  'pools, pooled and as the mean over domains of the per-domain figures, and the '
                  'fraction of pools with a negative $\\tau_b$. "undef." counts the pools where one '
-                 'indicator is constant over the sample and $\\tau_b$ is undefined. The '
-                 'B-MaxSum/B-MaxMin pair does not depend on $\\kappa$.',
+                 'indicator is constant over the sample. The B-MaxSum/B-MaxMin pair does not '
+                 'depend on $\\kappa$.',
                  ['pair', 'k', 'kappa', 'n', 'undef.', 'median', 'q1', 'q3', 'macro median',
                   'macro q1', 'macro q3', 'negative'],
-                 [[row['pair'], row['k'], row['kappa'], row['n'], row['undefined'], row['median'],
-                   row['q1'], row['q3'], row['macro_median'], row['macro_q1'], row['macro_q3'],
-                   row['negative_fraction']]
-                  for row in summary]),
+                 [[r['pair'], r['k'], r['kappa'], r['n'], r['undefined'], r['median'], r['q1'],
+                   r['q3'], r['macro_median'], r['macro_q1'], r['macro_q3'], r['negative_fraction']]
+                  for r in tau_summary]),
         rp.table(out / 'tables' / 'e2_cross.tex', 'tab:e2-cross',
                  'Each selection rule scored under each indicator, as a fraction of the best of '
-                 'the four selections on the same pool, averaged over all $k$ and $\\kappa$. '
-                 'Pools with $b \\leq k$ are excluded, since there every rule returns every '
-                 'behaviour; the all-pools version is the appendix CSV. ' + rp.TIE_RULE,
+                 'the four selections on the same pool, averaged over all $k$ and $\\kappa$, on '
+                 'the pools with $b > k$. ' + rp.TIE_RULE,
                  ['selection', 'aggregate'] + list(runner.INDICATORS),
-                 [[row['selector'], name] + [row[f'scored_{s}'] for s in runner.INDICATORS]
+                 [[r['selector'], name] + [r[f'scored_{s}'] for s in runner.INDICATORS]
                   for name, statistic in (('pooled', rp.pooled), ('macro', rp.macro))
-                  for row in _matrix(main, statistic) if row['k'] == 'all']),
+                  for r in _matrix(main, statistic, 'b>k') if r['k'] == 'all']),
+        rp.table(out / 'tables' / 'e2_weights.tex', 'tab:e2-weights',
+                 "The astronaut's model at each further weight setting against the declared one, "
+                 'on the rovers pools: the fraction of (pool, $k$, $\\kappa$) cells on which the '
+                 'selection returns the same behaviour set, and the mean Jaccard similarity of the '
+                 'two sets. B-Coverage reads no weights, so its rows are a check.',
+                 ['setting', 'indicator', 'cells', 'same set', 'Jaccard'],
+                 [[r['setting'], r['indicator'], len(cell), rp.pooled(cell, 'same_set'),
+                   rp.pooled(cell, 'jaccard')]
+                  for (setting, indicator), cell in rp.group(weights, ('setting', 'indicator')).items()
+                  for r in cell[:1]]),
         _figure(taus, out / 'figures' / 'e2_tau.pdf'),
     ]
-
-    # The construction check: B-Coverage is k on every drawn subset, so it must
-    # be constant on every one of them.
-    checked = [row for row in subsets if row['indicator'] == 'bcoverage']
-    failing = [row for row in checked if not row['constant']]
+    checked = [r for r in subsets if r['indicator'] == 'bcoverage']
+    failing = [r for r in checked if not r['constant']]
     written.append(rp.manifest(cfg, 'e2', written, results, extra={
         'bcoverage_constant_check': 'FAIL' if failing else 'PASS' if checked else 'no subsets drawn',
         'cells_checked': len(checked), 'cells_failing': len(failing),
-        # The same check as the aggregate block of e2_random_subsets.csv reports.
-        'bcoverage_constant_fraction': {f"k={row['k']} kappa={row['kappa']}":
-                                        row['constant_fraction'] for row in constancy
-                                        if row['indicator'] == 'bcoverage'},
-        'failures': [f"{row['instance']} {row['model']} k={row['k']} kappa={row['kappa']}"
-                     for row in failing],
-        'subsets_requested': cfg['e2']['subsets'],
-        'note': 'on pools with b <= k every selection returns every behaviour, so the main cross '
-                'table is restricted to b > k; e2_cross_all_pools.csv is the appendix version and '
-                'its b_le_k_cells column counts the cells the restriction drops',
-    }))
+        'bcoverage_selects_same_set_under_every_weight': (
+            rp.pooled([r for r in weights if r['indicator'] == 'bcoverage'], 'same_set')),
+        'subsets_requested': cfg['e2']['random_subsets'],
+        'seeding': 'random.Random(repr((run seed, instance, pool stem, model, k)))',
+        'weight_settings': cfg['e2']['weight_settings'],
+        'note': 'on pools with b <= k every selection returns every behaviour, so the table is '
+                'over b > k; the all-pools matrices are the rows marked pools = all'}))
     return written

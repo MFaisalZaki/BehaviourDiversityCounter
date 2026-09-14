@@ -26,12 +26,12 @@ class TestConfig:
 
     @pytest.mark.parametrize('edit, message', [
         ('[nonsense]\nx = 1\n', 'unknown section'),
-        ('[e2]\nsubsets = 25\nextra = 1\n', 'unknown key'),
+        ('[e2]\nrandom_subsets = 25\nextra = 1\n', 'unknown key'),
     ])
     def test_a_typo_is_an_error_not_a_silently_ignored_setting(self, tmp_path, edit, message):
         text = resolve('smoke').read_text()
         if message == 'unknown key':
-            text = text.replace('[e2]\nsubsets = 25', '[e2]\nsubsets = 25\nextra = 1')
+            text = text.replace('[e2]\nrandom_subsets = 25', '[e2]\nrandom_subsets = 25\nextra = 1')
         else:
             text += '\n' + edit
         path = tmp_path / 'bad.toml'
@@ -41,18 +41,12 @@ class TestConfig:
 
     def test_a_missing_section_is_an_error(self, tmp_path):
         text = '\n'.join(line for line in resolve('smoke').read_text().splitlines()
-                         if not line.startswith('[e6]') and 'repeats' not in line
-                         and 'feature_counts' not in line and 'pool_sizes = [30]' not in line)
+                         if not line.startswith('[e3]') and 'repeats' not in line
+                         and 'pool_sizes = [30]' not in line)
         path = tmp_path / 'short.toml'
         path.write_text(text)
         with pytest.raises(ValueError, match='missing (section|key)'):
             load(str(path))
-
-    def test_a_whole_number_where_a_float_is_meant_is_accepted(self, tmp_path):
-        text = resolve('smoke').read_text().replace('q = 2.0', 'q = 2')
-        path = tmp_path / 'int_q.toml'
-        path.write_text(text)
-        assert load(str(path))['e1']['q'] == 2.0
 
 
 class TestCli:
@@ -65,9 +59,9 @@ class TestCli:
             cli.main(['generate', 'smoke', '--results-dir', str(tmp_path), '--list'])
 
     def test_run_list_seeds_the_committed_pools_and_lists_tasks(self, tmp_path, capsys):
-        assert cli.main(['run', 'smoke', 'e2', '--results-dir', str(tmp_path), '--list']) == 0
+        assert cli.main(['run', 'smoke', 'select', '--results-dir', str(tmp_path), '--list']) == 0
         printed = capsys.readouterr().out.strip().splitlines()
-        assert printed and all(line.startswith('e2/') for line in printed)
+        assert printed and all(line.startswith('select/') for line in printed)
         assert len(pools.pool_files(load('smoke', results_dir=tmp_path))) == 4
 
     def test_report_setup_writes_the_two_files_the_paper_consumes(self, tmp_path, capsys):
@@ -79,6 +73,6 @@ class TestCli:
         assert manifest['config']['hash'] and manifest['tie_breaking']
         assert manifest['planner']['searches']['topq'].startswith('symq_bd(')
 
-    def test_reporting_an_experiment_with_no_results_says_so(self, tmp_path):
-        with pytest.raises(SystemExit, match='no results'):
-            cli.main(['report', 'smoke', 'e2', '--results-dir', str(tmp_path)])
+    def test_reporting_with_no_results_says_so(self, tmp_path):
+        with pytest.raises(SystemExit, match='run the select tasks first'):
+            cli.main(['report', 'smoke', 'e1', '--results-dir', str(tmp_path)])

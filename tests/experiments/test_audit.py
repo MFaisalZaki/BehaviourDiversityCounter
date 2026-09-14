@@ -21,11 +21,12 @@ from itertools import combinations
 import pytest
 
 from behaviour_diversity_counter.behaviour_diversity_counter import TIE_DECIMALS
-from bdc_experiments import models, pools
+from behaviour_diversity_counter import BehaviourDiversityCounter
+from bdc_experiments import models, pools, runner
 from bdc_experiments.config import load
 from bdc_experiments.reference import (
     ref_bcoverage, ref_bmaxmin, ref_bmaxsum, ref_bnovelty, ref_distinct, ref_extract,
-    ref_indicator, ref_optimum, ref_optimum_at_most)
+    ref_indicator, ref_stability)
 
 TOL = 1e-9
 KAPPAS = (1, 2, 3, 5)
@@ -313,7 +314,7 @@ def test_bcoverage_extraction_is_the_stated_rule(space):
     plan exhibiting each, ties to the earliest position, behaviours in
     first-occurrence order, then padding in pool order.
 
-    Thm. bcov-greedy leaves the representative open, but the library and the
+    The paper leaves the representative open, but the library and the
     reference both state this rule, so positions are compared and not sets. It
     is exact over integer costs, so there is no tie tolerance to allow for and
     no legitimate way for the two sides to differ.
@@ -346,61 +347,6 @@ def test_bcoverage_extraction_is_the_stated_rule(space):
         f'the sample never separates the rule from its neighbours: {cheaper} cases of a '
         f'behaviour with plans of differing cost, {reordered} where first- and '
         f'last-occurrence order differ under a truncating k, {padded} needing padding')
-
-
-def test_reference_optima(space):
-    """``ref_optimum`` and ``ref_optimum_at_most``, which E3 scores the greedy
-    against and which no other test exercises.
-
-    The value must be the indicator of the subset it comes with; the subset
-    must have the size asked for and be ascending; neither greedy may beat the
-    optimum; allowing a smaller subset can only help, and for B-MaxMin it
-    demonstrably does; an out-of-range k gives (None, None), not a zero; and
-    B-Coverage's optimum over k behaviours is k.
-    """
-    smaller_is_better, subsets = None, 0
-    for case in range(120):
-        sp = space(case)
-        counter, plans = pool_for(sp, 100000 + case, low=3, high=10)
-        trip = triples(plans)
-        behaviours = [b for _i, _c, b in trip]
-        u = ref_distinct(behaviours)
-        kappa = KAPPAS[case % len(KAPPAS)]
-        for indicator in INDICATORS:
-            for k in range(1, min(len(u), 5) + 1):    # C(b, k) subsets, exhaustively
-                subsets += math.comb(len(u), k)
-                why = f'seed={case} {sp} k={k} {indicator} kappa={kappa} b={len(u)}'
-                value, subset = ref_optimum(behaviours, sp.d, k, indicator, kappa)
-                at_most, upto = ref_optimum_at_most(behaviours, sp.d, k, indicator, kappa)
-                assert len(subset) == k and list(subset) == sorted(set(subset)), why
-                assert 1 <= len(upto) <= k and list(upto) == sorted(set(upto)), why
-                assert value == pytest.approx(ref_indicator(
-                    indicator, [u[i] for i in subset], sp.d, kappa), abs=TOL), why
-                assert at_most == pytest.approx(ref_indicator(
-                    indicator, [u[i] for i in upto], sp.d, kappa), abs=TOL), why
-                assert at_most >= value - TOL, f'{why}: at-most {at_most!r} < {value!r}'
-                if indicator == 'bcoverage':
-                    assert value == float(k), why
-                if indicator == 'bmaxmin' and at_most > value + TOL:
-                    smaller_is_better = (f'{why}: {len(upto)} behaviours score '
-                                         f'{at_most!r}, {k} of them only {value!r}')
-                for side, chosen in (('library', positions(plans, counter.extract(
-                        plans, k, indicator=indicator, k_nn=kappa))),
-                        ('reference', ref_extract(indicator, trip, sp.d, k, kappa))):
-                    got = ref_indicator(indicator, [trip[i][2] for i in chosen], sp.d, kappa)
-                    assert got <= value + TOL, (f'{why}: the {side} greedy scored '
-                                                f'{got!r}, past the optimum {value!r}')
-            # An out-of-range k, and an empty behaviour set, score nothing at
-            # all rather than the zero an empty subset would read as.
-            for k in (0, -1, len(u) + 1):
-                assert ref_optimum(behaviours, sp.d, k, indicator, kappa) == (None, None), (
-                    f'seed={case} {indicator} k={k}: out of range and still scored')
-            assert ref_optimum_at_most(behaviours, sp.d, 0, indicator, kappa) == (None, None)
-            assert ref_optimum_at_most([], sp.d, 3, indicator, kappa) == (None, None)
-
-    assert smaller_is_better, 'no k where B-MaxMin prefers fewer than k behaviours'
-    print(f'\n{subsets} k-subsets enumerated by ref_optimum, and the sizes below k '
-          f'again by ref_optimum_at_most; the at-most optimum wins at {smaller_is_better}')
 
 
 # ----------------------------------------------------------------------
@@ -474,10 +420,11 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
 
     The rest of the audit runs on random stub spaces, whose dissimilarities are
     drawn to make near-ties common. These four committed pools -- no planner
-    and no benchmark checkout needed -- carry the real feature models, and
-    answer what the stub spaces cannot: whether ``best_index``'s rounding can
-    merge two genuinely different scores in the spaces used here. The smallest
-    gap between two distinct dissimilarities is reported with the count.
+    and no benchmark checkout needed -- carry the real feature models and the
+    stability one, and answer what the stub spaces cannot: whether
+    ``best_index``'s rounding can merge two genuinely different scores in the
+    spaces used here. The smallest gap between two distinct dissimilarities is
+    reported with the count.
     """
     cfg = load('smoke', results_dir=tmp_path)
     pools.ensure_pools(cfg)
@@ -485,15 +432,18 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
     for path in pools.pool_files(cfg):
         pool = pools.read_pool(path)
         task = pools.task_of(pool)
-        info = {'id': pool['instance'], 'domain': pool['domain'],
-                'optimal_cost': pool['optimal_cost'], 'q': pool['q'],
-                'resource_dir': pools.results_root(cfg) / 'resources'}
-        for spec in models.models_for(cfg, pool['domain']):
+        info = runner.instance_info(cfg, pool)
+        for spec in [models.generic_spec(cfg), models.domain_model(cfg, pool['domain']), models.STABILITY]:
             counter = models.build_counter(spec, task, info)
             loaded = pools.load_pool(path, counter=counter, task=task)
             dump = pools.behaviour_dump(cfg, counter, loaded,
-                                        models.model_record(spec, task, info))
-            matrix, plans = dump['matrix'], loaded['plans']
+                                        models.model_record(spec, counter, task, info))
+            plans, distinct = loaded['plans'], dump['distinct']
+            if dump['matrix'] is not None:
+                matrix = dump['matrix']
+            else:       # the stability model: the distance over the action sets
+                matrix = [[ref_stability(x[0].split(' ; '), y[0].split(' ; ')) for y in distinct]
+                          for x in distinct]
 
             def d(i, j, matrix=matrix):
                 """psi_M between two behaviours of the dump, by their index."""
@@ -502,7 +452,7 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
             # A behaviour is its index into the dump's `distinct`, which is all
             # the reference asks of one: it only compares them for equality.
             trip = [(e['index'], e['cost'], e['distinct']) for e in dump['plans']]
-            b = len(dump['distinct'])
+            b = len(distinct)
             where = f'{pool["domain"]}/{path.stem} {spec.name} ({len(plans)} plans, {b}b)'
             seen.append(where)   # printed: the sweep is only as wide as the pools are
             apart = sorted({matrix[i][j] for i in range(b) for j in range(i + 1, b)})
@@ -528,7 +478,7 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
     assert not faults, (f'{len(faults)} of {comparisons} extractions on the committed '
                         'pools disagree with the reference.\n' + '\n'.join(faults[:6]))
     # A pool of one behaviour contributes no gap at all -- driverlog under the
-    # generic model is one -- so the measurement needs a pool that has two.
+    # stability model is one -- so the measurement needs a pool that has two.
     assert gaps, 'no committed pool exposes two distinct behaviours to measure a gap between'
     assert min(gaps) > TIE_TOLERANCE, (
         f'two distinct dissimilarities on the committed pools lie {min(gaps):.3e} apart, '
@@ -537,6 +487,51 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
     print(f'\n{comparisons} extractions over {len(seen)} (pool, model) pairs agree with '
           f'the reference; smallest gap between two distinct dissimilarities '
           f'{min(gaps):.4f}, tie tolerance {TIE_TOLERANCE:g}\n  ' + '\n  '.join(seen))
+
+
+def test_every_dimension_is_definite_on_the_committed_pools(tmp_path):
+    """Check 7: every per-dimension dissimilarity of every model, the
+    stability one included, is zero only on equal values, over every pair of
+    values the dimension takes on the smoke pools (Def. feature)."""
+    cfg = load('smoke', results_dir=tmp_path)
+    pools.ensure_pools(cfg)
+    pairs = 0
+    for path in pools.pool_files(cfg):
+        pool = pools.read_pool(path)
+        task, info = pools.task_of(pool), runner.instance_info(cfg, pool)
+        for spec in models.selection_specs(cfg, pool['domain']) + models.timing_specs(cfg, pool['domain']):
+            counter = models.build_counter(spec, task, info)
+            counter.b_coverage(pools.load_pool(path, counter=counter, task=task)['plans'])
+            for dim in counter.dimensions.values():
+                values = sorted(map(str, dim.domain))
+                for x in values:
+                    assert dim.distance(f'{dim.name}:{x}', f'{dim.name}:{x}') == 0.0, (spec.name, dim.name, x)
+                for x, y in combinations(values, 2):
+                    assert dim.distance(f'{dim.name}:{x}', f'{dim.name}:{y}') > 0, (spec.name, dim.name, x, y)
+                    pairs += 1
+    assert pairs > 50, f'only {pairs} pairs of distinct values: the smoke pools are not exercising this'
+
+
+def test_the_stability_model_is_the_stability_distance(task, plan_l1_then_l2, plan_l2_then_l1,
+                                                        plan_two_trucks):
+    """Check 8: the stability model on the transport fixture. A behaviour
+    is a distinct action set, psi_M is ``ref_stability`` on every pair, and
+    B-MaxSum selection under it is ``ref_extract_bmaxsum`` with the stability
+    distance as d."""
+    counter = BehaviourDiversityCounter(task, [('stability', None)])
+    twin = type(plan_l1_then_l2)(list(plan_l1_then_l2.actions))   # a second plan, same actions
+    plans = [plan_l1_then_l2, plan_l2_then_l1, plan_two_trucks, twin]
+    actions = [[str(a) for a in plan.actions] for plan in plans]
+    assert counter.b_coverage(plans) == len({frozenset(a) for a in actions}) == 3
+    for i, j in combinations(range(len(plans)), 2):
+        counter.b_coverage(plans)
+        assert counter._pair_distance(plans[i].behaviour, plans[j].behaviour) == pytest.approx(
+            ref_stability(actions[i], actions[j]))
+    trip = [(i, 1, frozenset(a)) for i, a in enumerate(actions)]
+    d = lambda x, y: ref_stability(x, y)
+    for k in (1, 2, 3, 4):
+        chosen = positions(plans, counter.extract(plans, k, indicator='bmaxsum', k_nn=1))
+        assert chosen == ref_extract('bmaxsum', trip, d, k, 1), k
 
 
 def test_the_audit_never_relies_on_the_default_k_nn():

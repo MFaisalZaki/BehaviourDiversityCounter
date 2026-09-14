@@ -21,15 +21,15 @@ def main(argv=None):
     one.add_argument('--list', action='store_true', help='list the instances and exit')
     one.add_argument('--force', action='store_true', help='regenerate existing pools')
 
-    two = _common(sub.add_parser('run', help='phase two: one experiment'))
-    two.add_argument('experiment', choices=sorted(runner.MODULES))
+    two = _common(sub.add_parser('run', help='phase two: the selection sweep, or the timing'))
+    two.add_argument('kind', choices=sorted(runner.KINDS))
     two.add_argument('--task', default=None, help='one task id')
     two.add_argument('--list', action='store_true', help='list the task ids and exit')
     two.add_argument('--force', action='store_true', help='rerun tasks that already have a result')
     two.add_argument('--jobs', type=int, default=1, help='local process pool size')
 
     three = _common(sub.add_parser('report', help='CSVs, tables, figures, manifest'))
-    three.add_argument('experiment', choices=sorted(runner.MODULES) + ['setup'])
+    three.add_argument('report', choices=['setup', *sorted(runner.REPORTS), 'all'])
 
     args = parser.parse_args(argv)
     cfg = load(args.config, results_dir=args.results_dir)
@@ -46,25 +46,18 @@ def main(argv=None):
         generate.run(cfg, instances, force=args.force, only=args.instance)
         return 0
 
+    pools.ensure_pools(cfg)
     if args.command == 'run':
-        pools.ensure_pools(cfg)
         if args.list:
-            print('\n'.join(runner.tasks(cfg, args.experiment)))
+            print('\n'.join(runner.tasks(cfg, args.kind)))
             return 0
-        counts = runner.run(cfg, args.experiment, only=args.task, force=args.force, jobs=args.jobs)
-        print(f"{args.experiment}: {counts['ok']} ok, {counts['failed']} failed, "
-              f"{counts['skipped']} skipped")
+        counts = runner.run(cfg, args.kind, only=args.task, force=args.force, jobs=args.jobs)
+        print(f"{args.kind}: {counts['ok']} ok, {counts['failed']} failed, {counts['skipped']} skipped")
         return 1 if counts['failed'] else 0
 
-    pools.ensure_pools(cfg)
-    if args.experiment == 'setup':
-        for path in report.setup_report(cfg):
+    names = ['setup', *sorted(runner.REPORTS)] if args.report == 'all' else [args.report]
+    for name in names:
+        build = report.setup_report if name == 'setup' else runner.module(name).report
+        for path in build(cfg):
             print(path)
-        return 0
-    results = runner.load_results(cfg, args.experiment)
-    if not results:
-        raise SystemExit(f'no results for {args.experiment} under '
-                         f"{cfg['run']['results_dir']}; run it first")
-    for path in runner.module(args.experiment).report(cfg, results):
-        print(path)
     return 0

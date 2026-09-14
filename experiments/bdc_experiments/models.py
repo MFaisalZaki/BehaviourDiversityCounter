@@ -1,9 +1,12 @@
 """The diversity models, as data.
 
 The paper's thesis is that features are user-defined, so the evaluation uses
-domain-specific models written by the authors acting as the domain expert, plus
-one generic model on every domain as a control. A model is a ``ModelSpec``; a
-counter is built from one against a particular task.
+domain-specific models written by the authors acting as the domain expert, one
+generic model on every domain as a control, and the literature's model stated
+as one feature, the stability distance over action sets, which turns the
+formulation into the post-hoc selection of Katz and Sohrabi (2020). E2 varies
+the astronaut's weights and E3 the number of features; each variant is a spec
+of its own, with its own hash and its own behaviour dump.
 
 The resource objects of an instance are read from the PDDL problem by type
 name. Two encodings occur in the benchmark and both are handled: rovers
@@ -13,13 +16,10 @@ satellite carry the type as a unary predicate true in the initial state.
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 
 from behaviour_diversity_counter import BehaviourDiversityCounter
-
-#: The friendly feature names the config may use for the generic model.
-ALIASES = {'goal_order': 'go', 'cost_bin': 'cbin', 'resources_used': 'ru',
-           'resource_number': 'rn', 'resource_count': 'rc'}
 
 
 @dataclass(frozen=True)
@@ -39,13 +39,10 @@ class ModelSpec:
 #: The per-domain models. `go` is the order in which the problem's goal atoms
 #: are first achieved: in rovers every goal atom is a `communicated_*` atom, in
 #: logistics and satellite every goal atom is a delivery or an image, and in
-#: driverlog the goals also fix where one truck and one driver end up, so there
-#: the feature reads "goal order" a little more widely than "delivery order".
+#: driverlog the goals also fix where one truck and one driver end up.
 PER_DOMAIN = (
     ModelSpec('rovers_astronaut', ('rovers',),
               (FeatureSpec('rn', {'types': ('rover',)}, 0.5), FeatureSpec('go', {}, 0.5))),
-    ModelSpec('rovers_fine', ('rovers',),
-              (FeatureSpec('ru', {'types': ('rover',)}, 0.5), FeatureSpec('go', {}, 0.5))),
     ModelSpec('logistics_dispatcher', ('logistics98', 'logistics00'),
               (FeatureSpec('ru', {'types': ('truck', 'airplane')}, 0.5), FeatureSpec('go', {}, 0.5))),
     ModelSpec('driverlog_dispatcher', ('driverlog',),
@@ -54,30 +51,63 @@ PER_DOMAIN = (
               (FeatureSpec('ru', {'types': ('satellite',)}, 0.5), FeatureSpec('go', {}, 0.5))),
 )
 
+#: The literature's model as one feature: the plan's action set, compared by
+#: the stability distance.
+STABILITY = ModelSpec('stability', None, (FeatureSpec('stability', {}),))
 
-def generic_spec(cfg, goal_cap=None, cost_bin_width=None, features=None, name=None):
-    """The control model, and the two resolution knobs E5 varies."""
+
+def generic_spec(cfg, features=None, name='generic'):
+    """The control model; both its knobs are fixed in the config."""
     settings = cfg['models']['generic']
-    cap = settings['goal_cap'] if goal_cap is None else goal_cap
-    width = settings['cost_bin_width'] if cost_bin_width is None else cost_bin_width
-    keys = [ALIASES.get(f, f) for f in (features if features is not None else settings['features'])]
-    knobs = {'go': {'max-goals': cap}, 'cbin': {'width': width}}
-    return ModelSpec(name or 'generic', None,
-                     tuple(FeatureSpec(key, knobs.get(key, {})) for key in keys))
+    knobs = {'go': {'max-goals': settings['goal_cap']}, 'cbin': {'width': settings['cost_bin_width']}}
+    return ModelSpec(name, None, tuple(FeatureSpec(key, knobs.get(key, {}))
+                                       for key in (features or settings['features'])))
+
+
+def domain_model(cfg, domain):
+    """The feature-based model of a domain: its own where one exists, else
+    the generic control. E2's F."""
+    return next((spec for spec in PER_DOMAIN if domain in spec.domains), generic_spec(cfg))
+
+
+def weight_variants(cfg):
+    """The astronaut's model under each further weight setting of E2."""
+    base = PER_DOMAIN[0]
+    return [ModelSpec(f"{base.name}-w{'-'.join(f'{w:g}' for w in weights)}", base.domains,
+                      tuple(FeatureSpec(f.key, f.params, w) for f, w in zip(base.features, weights)))
+            for weights in cfg['e2']['weight_settings']
+            if list(weights) != [f.weight for f in base.features]]
+
+
+def timing_specs(cfg, domain):
+    """E3's models by feature count: goal order alone, the generic pair, and,
+    where the domain has a model of its own, that model plus the cost bin."""
+    own = next((spec for spec in PER_DOMAIN if domain in spec.domains), None)
+    specs = [generic_spec(cfg, features=['go'], name='generic-n1'), generic_spec(cfg)]
+    if own:
+        specs.append(ModelSpec(f'{own.name}-cbin', own.domains,
+                               tuple(FeatureSpec(f.key, f.params) for f in own.features)
+                               + (FeatureSpec('cbin', {'width': cfg['models']['generic']['cost_bin_width']}),)))
+    return specs
+
+
+def selection_specs(cfg, domain):
+    """Every model the selection sweep runs on a pool of this domain."""
+    return ([generic_spec(cfg), STABILITY] + [s for s in PER_DOMAIN if domain in s.domains]
+            + [s for s in weight_variants(cfg) if domain in s.domains])
 
 
 def registry(cfg):
-    """``name -> ModelSpec`` for everything the config enables."""
-    models = {'generic': generic_spec(cfg)}
-    models.update({spec.name: spec for spec in PER_DOMAIN})
-    enabled = cfg['models'].get('enabled')
-    return {name: spec for name, spec in models.items() if enabled is None or name in enabled}
+    """``name -> ModelSpec`` for every model any task can name."""
+    specs = [generic_spec(cfg), STABILITY, *PER_DOMAIN, *weight_variants(cfg)]
+    specs += [s for d in cfg['benchmark']['domains'] for s in timing_specs(cfg, d)]
+    return {spec.name: spec for spec in specs}
 
 
-def models_for(cfg, domain):
-    """The models that apply to a domain, generic first."""
-    return [spec for spec in registry(cfg).values()
-            if spec.domains is None or domain in spec.domains]
+def is_primary(name):
+    """The models the setup describes: the generic control and the per-domain
+    ones. E2 reads these alone; the variants belong to E2-C and E3."""
+    return name == 'generic' or name in {spec.name for spec in PER_DOMAIN}
 
 
 def model_hash(spec):
@@ -123,33 +153,6 @@ def write_resource_file(path, objects):
     return path
 
 
-def model_record(spec, task, instance_info):
-    """What every result file and every behaviour dump says about the model."""
-    features = []
-    for feature in spec.features:
-        entry = {'key': feature.key, 'params': _sortable(feature.params),
-                 'weight': feature.weight}
-        if 'types' in feature.params:
-            entry['objects'] = resource_objects(task, feature.params['types'])
-        if feature.key == 'go':
-            entry['goal_atoms'] = _goal_atoms(task)
-        features.append(entry)
-    return {'name': spec.name, 'hash': model_hash(spec),
-            'domains': list(spec.domains) if spec.domains else None,
-            'features': features,
-            'weight_convention': ('declared' if any(f.weight is not None for f in spec.features)
-                                  else 'uniform 1/n'),
-            'instance': instance_info.get('id')}
-
-
-def _goal_atoms(task):
-    from unified_planning.model.walkers.free_vars import FreeVarsExtractor
-    atoms = []
-    for goal in task.goals:
-        atoms.extend(sorted(FreeVarsExtractor().get(goal), key=lambda atom: atom.node_id))
-    return [str(atom) for atom in atoms]
-
-
 def build_counter(spec, task, instance_info, trace_cache=None):
     """The library counter for a spec over one instance.
 
@@ -182,7 +185,7 @@ def build_counter(spec, task, instance_info, trace_cache=None):
 
 
 #: What each dimension is, how the paper counts |Delta_i|, and its dissimilarity.
-#: The setup report prints this table and E5 multiplies the sizes out.
+#: The setup report prints this table.
 DIMENSION_DOC = {
     'go': ('order in which the goal atoms are first achieved',
            'm! orderings of the m capped goal atoms',
@@ -196,9 +199,9 @@ DIMENSION_DOC = {
     'rn': ('how many of the declared resources the plan uses',
            '|R| + 1 values',
            'discrete: 0 when equal, 1 otherwise'),
-    'rc': ('how many times each declared resource appears',
-           'unbounded: a count vector over the R resources',
-           'weighted Jaccard (Ruzicka) over the count vectors'),
+    'stability': ("the plan's set of actions",
+                  'the set of action sets over the task\'s actions',
+                  'stability: 1 - Jaccard over the two action sets (Srivastava et al. 2007)'),
 }
 
 
@@ -206,7 +209,7 @@ def dimension_size(counter, key):
     """|Delta_i| for one built dimension, or None where it is unbounded."""
     dimension = counter.dimensions[key]
     if key == 'go':
-        return _factorial(len(dimension.vars))
+        return math.factorial(len(dimension.vars))
     if key == 'cbin':
         return dimension.bins
     if key == 'ru':
@@ -216,19 +219,24 @@ def dimension_size(counter, key):
     return None
 
 
-def space_size(counter):
-    """|BS| = the product of the dimension sizes, or None if any is unbounded."""
-    sizes = [dimension_size(counter, key) for key in counter.dimensions]
-    if any(size is None for size in sizes):
-        return None
-    product = 1
-    for size in sizes:
-        product *= size
-    return product
-
-
-def _factorial(n):
-    result = 1
-    for value in range(2, n + 1):
-        result *= value
-    return result
+def model_record(spec, counter, task, instance_info):
+    """What every result file and every behaviour dump says about the model:
+    the features as declared, the objects and goal atoms they resolved to on
+    this instance, and the dimension sizes whose product is |BS| (Def. bspace)."""
+    features = []
+    for feature in spec.features:
+        entry = {'key': feature.key, 'params': _sortable(feature.params),
+                 'weight': feature.weight, 'size': dimension_size(counter, feature.key)}
+        if 'types' in feature.params:
+            entry['objects'] = resource_objects(task, feature.params['types'])
+        if feature.key == 'go':
+            entry['goal_atoms'] = [str(atom) for atom in counter.dimensions['go'].vars]
+        features.append(entry)
+    sizes = [f['size'] for f in features]
+    return {'name': spec.name, 'hash': model_hash(spec),
+            'domains': list(spec.domains) if spec.domains else None,
+            'features': features,
+            'space_size': None if None in sizes else math.prod(sizes),
+            'weight_convention': ('declared' if any(f.weight is not None for f in spec.features)
+                                  else 'uniform 1/n'),
+            'instance': instance_info.get('id')}

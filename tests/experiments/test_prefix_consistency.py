@@ -1,11 +1,12 @@
-"""E4 computes every prefix from one run to k_max. That is only sound if the
-greedy procedures are prefix-consistent: step k+1 extends step k.
+"""The selection sweep records one run to k_max and every report reads the
+selection at a smaller k off its prefix. That is only sound if the selection
+functions are prefix-consistent: step k+1 extends step k.
 
 Checked here once, on the committed smoke pools, against the library itself.
 k = 1 is deliberately exempt: the three dissimilarity-based rules return the
 first plan of the pool at k = 1 and open on the farthest pair at k = 2, which
-need not contain it. The paper reads these indicators at a fixed set size of at
-least two, and E4's k_range starts at 2.
+need not contain it. The paper reads these indicators at a fixed set size of
+at least two, and every k a report reads is at least two.
 """
 
 import pytest
@@ -28,11 +29,9 @@ def cases(cfg):
     for path in pools.pool_files(cfg):
         pool = pools.read_pool(path)
         task = pools.task_of(pool)
-        info = {'id': pool['instance'], 'domain': pool['domain'],
-                'optimal_cost': pool['optimal_cost'], 'q': pool['q'],
-                'resource_dir': pools.results_root(cfg) / 'resources'}
+        info = runner.instance_info(cfg, pool)
         trace, loaded = {}, None
-        for spec in models.models_for(cfg, pool['domain']):
+        for spec in models.selection_specs(cfg, pool['domain']):
             counter = models.build_counter(spec, task, info, trace_cache=trace)
             if loaded is None:
                 loaded = pools.load_pool(path, counter=counter, task=task)
@@ -56,7 +55,7 @@ def test_a_run_to_k_max_equals_the_runs_to_each_k(seeded):
                         f'{instance} {model} {indicator} kappa={kappa}: the run to k={k} '
                         f'is not the first {k} of the run to k={k_max}')
                     compared += 1
-    assert compared > 50, f'only {compared} comparisons: the smoke pools are not exercising this'
+    assert compared > 100, f'only {compared} comparisons: the smoke pools are not exercising this'
 
 
 def test_every_run_returns_exactly_min_k_pool(seeded):

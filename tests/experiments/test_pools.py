@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from bdc_experiments import models, pools
+from bdc_experiments import models, pools, runner
 from bdc_experiments.config import load
 
 
@@ -23,9 +23,15 @@ def rovers_pool(smoke):
 
 def counter_for(cfg, pool, name='generic'):
     task = pools.task_of(pool)
-    info = {'id': pool['instance'], 'domain': pool['domain'], 'optimal_cost': pool['optimal_cost'],
-            'q': pool['q'], 'resource_dir': pools.results_root(cfg) / 'resources'}
-    return models.build_counter(models.registry(cfg)[name], task, info), task
+    return models.build_counter(models.registry(cfg)[name], task, runner.instance_info(cfg, pool)), task
+
+
+def dump_for(cfg, path, name='generic'):
+    pool = pools.read_pool(path)
+    counter, task = counter_for(cfg, pool, name)
+    loaded = pools.load_pool(path, counter=counter, task=task)
+    record = models.model_record(models.registry(cfg)[name], counter, task, {'id': pool['instance']})
+    return pools.behaviour_dump(cfg, counter, loaded, record), pools.dump_path(cfg, record['hash'], loaded), loaded
 
 
 class TestRoundTrip:
@@ -82,42 +88,14 @@ class TestOrderAndCache:
         assert costs == sorted(costs)
 
     def test_the_behaviour_dump_is_written_once_and_read_back(self, smoke, rovers_pool):
-        pool = pools.read_pool(rovers_pool)
-        counter, task = counter_for(smoke, pool)
-        loaded = pools.load_pool(rovers_pool, counter=counter, task=task)
-        record = models.model_record(models.registry(smoke)['generic'], task,
-                                     {'id': pool['instance']})
-        first = pools.behaviour_dump(smoke, counter, loaded, record)
-        path = pools.dump_path(smoke, record['hash'], loaded)
+        first, path, _ = dump_for(smoke, rovers_pool)
         stamp = path.stat().st_mtime_ns
-        second = pools.behaviour_dump(smoke, counter, loaded, record)
+        second, _, _ = dump_for(smoke, rovers_pool)
         assert path.stat().st_mtime_ns == stamp, 'the second load rewrote the dump'
         assert first == second
 
-    def test_the_summary_sidecar_agrees_with_the_dump(self, smoke, rovers_pool):
-        """Reading b should not mean parsing a b x b matrix."""
-        pool = pools.read_pool(rovers_pool)
-        counter, task = counter_for(smoke, pool)
-        loaded = pools.load_pool(rovers_pool, counter=counter, task=task)
-        record = models.model_record(models.registry(smoke)['generic'], task,
-                                     {'id': pool['instance']})
-        dump = pools.behaviour_dump(smoke, counter, loaded, record)
-        path = pools.summary_path(pools.dump_path(smoke, record['hash'], loaded))
-        summary = json.loads(path.read_text())
-        assert summary['b'] == len(dump['distinct'])
-        assert summary['pool_size'] == len(dump['plans'])
-        assert summary['distinct'] == dump['distinct']
-        assert summary['features'] == dump['features']
-        assert 'matrix' not in summary
-        assert path.stat().st_size < pools.dump_path(smoke, record['hash'], loaded).stat().st_size
-
     def test_the_dump_holds_the_raw_material_for_a_recomputation(self, smoke, rovers_pool):
-        pool = pools.read_pool(rovers_pool)
-        counter, task = counter_for(smoke, pool)
-        loaded = pools.load_pool(rovers_pool, counter=counter, task=task)
-        record = models.model_record(models.registry(smoke)['generic'], task,
-                                     {'id': pool['instance']})
-        dump = pools.behaviour_dump(smoke, counter, loaded, record)
+        dump, _, loaded = dump_for(smoke, rovers_pool)
         b = len(dump['distinct'])
         assert len(dump['plans']) == loaded['record']['size']
         assert len(dump['matrix']) == b and all(len(row) == b for row in dump['matrix'])
@@ -129,3 +107,14 @@ class TestOrderAndCache:
         # The per-plan behaviour is the tuple the matrix is indexed by.
         for entry in dump['plans']:
             assert dump['distinct'][entry['distinct']] == entry['behaviour']
+
+    def test_the_stability_dump_carries_the_action_sets_and_no_matrix(self, smoke, rovers_pool):
+        """Under the stability model b runs to the pool size, so the matrix
+        is left out; the behaviour tuple is the action set a reader recomputes
+        the stability distance from."""
+        dump, _, loaded = dump_for(smoke, rovers_pool, 'stability')
+        assert dump['matrix'] is None and dump['features'] == ['stability']
+        assert 1 <= len(dump['distinct']) <= loaded['record']['size']
+        for entry in dump['plans']:
+            actions = set(entry['behaviour'][0].split(' ; '))
+            assert actions == {str(a) for a in loaded['plans'][entry['index']].actions}

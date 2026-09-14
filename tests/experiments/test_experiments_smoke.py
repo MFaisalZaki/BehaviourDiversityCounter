@@ -1,4 +1,4 @@
-"""Every experiment, end to end on the committed smoke pools.
+"""The whole evaluation, end to end on the committed smoke pools.
 
 No planner, no benchmark checkout: `configs/smoke.toml` sits beside four pools
 and the PDDL they were generated from, and the run seeds itself from them.
@@ -12,22 +12,20 @@ import pytest
 from bdc_experiments import cli, report, runner
 from bdc_experiments.config import load
 
-#: What each experiment's report must write. The paper's subsections consume
-#: these names, so a rename here is a broken \input there.
+#: What each report must write. The paper's subsections consume these names,
+#: so a rename here is a broken \input there.
 OUTPUTS = {
-    'e1': ['e1_behaviours.csv', 'e1_selections.csv', 'e1_pairwise_diffs.csv', 'e1_note.md',
-           'tables/e1_behaviours.tex', 'tables/e1_selections.tex', 'manifest.json'],
-    'e2': ['e2_random_subsets.csv', 'e2_kendall.csv', 'e2_cross.csv', 'e2_cross_macro.csv',
-           'e2_cross_all_pools.csv', 'tables/e2_kendall.tex', 'tables/e2_cross.tex',
-           'figures/e2_tau.pdf', 'manifest.json'],
-    'e3': ['e3_ratios.csv', 'e3_worst_cases.csv', 'e3_summary.csv', 'e3_checks.json',
-           'tables/e3_ratios.tex', 'figures/e3_ratios.pdf', 'manifest.json'],
-    'e4': ['e4_prefix_values.csv', 'e4_summary.csv', 'tables/e4_summary.tex',
-           'figures/e4_prefixes.pdf', 'manifest.json'],
-    'e5': ['e5_resolution.csv', 'e5_summary.csv', 'tables/e5_resolution.tex',
-           'figures/e5_cap_vs_b.pdf', 'figures/e5_time_vs_b.pdf', 'manifest.json'],
-    'e6': ['e6_timing.csv', 'e6_medians.csv', 'tables/e6_medians.tex',
-           'figures/e6_mapping_vs_generation.pdf', 'figures/e6_selection_vs_b.pdf',
+    'setup': ['benchmark.csv', 'models.csv', 'tables/setup_benchmark.tex',
+              'tables/setup_models.tex', 'manifest.json'],
+    'e1': ['e1_behaviours.csv', 'e1_selections.csv', 'e1_pairwise_diffs.csv', 'e1_stability.csv',
+           'e1_note.md', 'manifest.json']
+          + [f'tables/e1_{kind}_{domain}.tex' for domain in ('rovers', 'driverlog', 'satellite')
+             for kind in ('behaviours', 'selections', 'pairwise')],
+    'e2': ['e2_random_subsets.csv', 'e2_subsets.csv', 'e2_kendall.csv', 'e2_cross.csv',
+           'e2_cross_macro.csv', 'e2_weights.csv', 'tables/e2_kendall.tex', 'tables/e2_cross.tex',
+           'tables/e2_weights.tex', 'figures/e2_tau.pdf', 'manifest.json'],
+    'e3': ['e3_timing.csv', 'e3_medians.csv', 'tables/e3_medians.tex',
+           'figures/e3_mapping_vs_generation.pdf', 'figures/e3_selection_vs_b.pdf',
            'manifest.json'],
 }
 
@@ -36,55 +34,79 @@ OUTPUTS = {
 def swept(tmp_path_factory):
     """The whole smoke sweep, run once for every test in this module."""
     root = tmp_path_factory.mktemp('smoke')
-    for experiment in OUTPUTS:
-        assert cli.main(['run', 'smoke', experiment, '--results-dir', str(root)]) == 0, experiment
-        assert cli.main(['report', 'smoke', experiment, '--results-dir', str(root)]) == 0, experiment
-    assert cli.main(['report', 'smoke', 'setup', '--results-dir', str(root)]) == 0
+    for kind in runner.KINDS:
+        assert cli.main(['run', 'smoke', kind, '--results-dir', str(root)]) == 0, kind
+    assert cli.main(['report', 'smoke', 'all', '--results-dir', str(root)]) == 0
     return load('smoke', results_dir=root)
 
 
-@pytest.mark.parametrize('experiment', sorted(OUTPUTS))
-def test_every_declared_output_is_written(swept, experiment):
-    directory = report.report_dir(swept, experiment)
-    for name in OUTPUTS[experiment]:
-        path = directory / name
-        assert path.is_file(), f'{experiment} did not write {name}'
-        assert path.stat().st_size > 0, f'{experiment} wrote an empty {name}'
-        if name.endswith('.csv'):                     # a header at the very least
-            assert path.read_text().splitlines(), name
-        if name.endswith('.tex'):
+@pytest.mark.parametrize('name', sorted(OUTPUTS))
+def test_every_declared_output_is_written(swept, name):
+    directory = report.report_dir(swept, name)
+    for output in OUTPUTS[name]:
+        path = directory / output
+        assert path.is_file(), f'{name} did not write {output}'
+        assert path.stat().st_size > 0, f'{name} wrote an empty {output}'
+        if output.endswith('.csv'):                   # a header at the very least
+            assert path.read_text().splitlines(), output
+        if output.endswith('.tex'):
             text = path.read_text()
-            assert r'\toprule' in text and f'{{tab:{experiment}-' in text, name
+            assert r'\toprule' in text and f'{{tab:{name}-' in text, output
 
 
-@pytest.mark.parametrize('experiment', sorted(OUTPUTS))
-def test_no_task_failed_and_the_manifest_says_so(swept, experiment):
-    results = runner.load_results(swept, experiment)
-    assert results, f'{experiment} produced no results at all'
+@pytest.mark.parametrize('kind', sorted(runner.KINDS))
+def test_no_task_failed(swept, kind):
+    results = runner.load_results(swept, kind)
+    assert results, f'{kind} produced no results at all'
     failed = [r['task_id'] + ': ' + r['error']['message'] for r in results if r.get('error')]
     assert not failed, '\n'.join(failed)
-    manifest = json.loads((report.report_dir(swept, experiment) / 'manifest.json').read_text())
-    assert manifest['tasks']['total'] == len(results)
-    assert manifest['tasks']['failed'] == 0
-    assert manifest['config']['hash'] == swept['meta']['config_hash']
-    assert manifest['git']['revision'] and manifest['tie_breaking']
-    assert manifest['packages']['unified-planning']
-
-
-@pytest.mark.parametrize('experiment', sorted(OUTPUTS))
-def test_a_skipped_task_says_why_and_reports_nothing(swept, experiment):
-    for result in runner.load_results(swept, experiment):
+    for result in results:
         skipped = (result.get('extra') or {}).get('skipped')
         if skipped:
             assert isinstance(skipped, str) and len(skipped) > 10, result['task_id']
             assert not result['rows'], f'{result["task_id"]} was skipped but reported rows'
 
 
-def test_the_e3_checks_pass_on_the_smoke_pools(swept):
-    """Every B-Coverage greedy ratio is 1: a violation is a blocking issue."""
-    checks = json.loads((report.report_dir(swept, 'e3') / 'e3_checks.json').read_text())
-    assert checks['passed'], checks.get('violations')
-    assert checks['cases'] > 0, 'the check passed vacuously: it examined no case'
+def test_every_model_ran_on_every_pool_it_claims(swept):
+    names = {r['task_id'].rsplit('/', 1)[1] for r in runner.load_results(swept, 'select')}
+    for name in ('generic', 'stability', 'rovers_astronaut', 'driverlog_dispatcher',
+                 'satellite_operator', 'rovers_astronaut-w0.25-0.75'):
+        assert name in names, name
+
+
+@pytest.mark.parametrize('name', sorted(OUTPUTS))
+def test_the_manifest_names_the_code_and_the_data(swept, name):
+    manifest = json.loads((report.report_dir(swept, name) / 'manifest.json').read_text())
+    assert manifest['tasks']['failed'] == 0
+    assert manifest['config']['hash'] == swept['meta']['config_hash']
+    assert manifest['git']['revision'] and manifest['tie_breaking']
+    assert manifest['packages']['unified-planning']
+
+
+def test_the_checks_pass_on_the_smoke_pools(swept):
+    """B-Coverage is constant on every random equal-count subset (E2), and the
+    weights never move a B-Coverage selection (E2)."""
+    e2 = json.loads((report.report_dir(swept, 'e2') / 'manifest.json').read_text())['extra']
+    assert e2['bcoverage_constant_check'] == 'PASS' and e2['cells_checked'] > 0
+    assert e2['bcoverage_selects_same_set_under_every_weight'] == 1.0
+
+
+def test_the_case_study_reads_one_instance_per_domain(swept):
+    e1 = json.loads((report.report_dir(swept, 'e1') / 'manifest.json').read_text())['extra']
+    assert set(e1['chosen']) == {'rovers', 'driverlog', 'satellite'}
+    assert all(c['b'] >= swept['e1']['min_behaviours'] for c in e1['chosen'].values())
+
+
+def test_the_stability_model_counts_action_sets(swept):
+    """Under the stability model a behaviour is a distinct action set, so b
+    never exceeds the pool size and its dump carries no matrix."""
+    for result in runner.load_results(swept, 'select'):
+        if result['model']['name'] != 'stability':
+            continue
+        dump = runner.load_dump(swept, result)
+        assert dump['matrix'] is None
+        assert 1 <= len(dump['distinct']) <= result['pool']['size']
+        assert all(len(t) == 1 for t in dump['distinct'])
 
 
 def test_the_reports_rebuild_from_the_dumps_alone(swept):
@@ -94,14 +116,11 @@ def test_the_reports_rebuild_from_the_dumps_alone(swept):
     which revision, comes back byte for byte.
     """
     before = {}
-    for experiment in OUTPUTS:
-        directory = report.report_dir(swept, experiment)
-        for path in sorted(directory.rglob('*')):
+    for name in OUTPUTS:
+        for path in sorted(report.report_dir(swept, name).rglob('*')):
             if path.is_file() and path.name != 'manifest.json':
                 before[str(path)] = path.read_bytes()
-    for experiment in OUTPUTS:
-        assert cli.main(['report', 'smoke', experiment,
-                         '--results-dir', swept['run']['results_dir']]) == 0
+    assert cli.main(['report', 'smoke', 'all', '--results-dir', swept['run']['results_dir']]) == 0
     changed = [name for name, blob in before.items() if Path(name).read_bytes() != blob]
     assert not changed, 'a rebuild changed:\n' + '\n'.join(changed)
 
@@ -110,5 +129,5 @@ def test_the_setup_report_covers_every_pool(swept):
     rows = (report.report_dir(swept, 'setup') / 'benchmark.csv').read_text().splitlines()
     assert len(rows) == 4, rows          # a header and the three smoke domains
     models = (report.report_dir(swept, 'setup') / 'models.csv').read_text()
-    for name in ('generic', 'rovers_astronaut', 'driverlog_dispatcher', 'satellite_operator'):
+    for name in ('generic', 'stability', 'rovers_astronaut', 'driverlog_dispatcher', 'satellite_operator'):
         assert name in models, name

@@ -1,8 +1,8 @@
 """An independent reference for the paper's diversity definitions.
 
-The indicators B-Coverage, B-MaxSum, B-MaxMin and B-Novelty, their exhaustive
-optima, and the phase-two rules extract_lambda(M, C, k), written straight from
-the definitions. A behaviour is the tuple (extract_1(pi), ..., extract_n(pi));
+The indicators B-Coverage, B-MaxSum, B-MaxMin and B-Novelty, the phase-two
+rules extract_lambda(M, C, k) and the stability distance of the metric-based
+model, written straight from the definitions. A behaviour is the tuple (extract_1(pi), ..., extract_n(pi));
 ``d`` is psi_M; a plan triple is ``(index, cost, behaviour)`` and pools arrive
 cost-sorted, so the paper's "arbitrary" tie-break is made deterministic as the
 earliest position given. Sums use math.fsum: exactly rounded, hence independent
@@ -87,30 +87,11 @@ def ref_indicator(name, behaviours, d, kappa=None):
     raise ValueError('unknown indicator: %r' % (name,))
 
 
-def ref_optimum(behaviours, d, k, indicator, kappa=None):
-    """The exhaustive optimum over the subsets of exactly k behaviours."""
-    u = ref_distinct(behaviours)
-    if k < 1 or k > len(u):
-        return (None, None)
-    best_value, best_subset = None, None
-    for subset in combinations(range(len(u)), k):
-        value = ref_indicator(indicator, [u[i] for i in subset], d, kappa)
-        if _better(value, best_value):
-            best_value, best_subset = value, subset
-    return (best_value, best_subset)
-
-
-def ref_optimum_at_most(behaviours, d, k, indicator, kappa=None):
-    """The optimum over the subsets of size 1..min(k, b), smaller first;
-    (None, None) when there is no such subset, i.e. b == 0 or k < 1."""
-    u = ref_distinct(behaviours)
-    best_value, best_subset = None, None
-    for size in range(1, min(k, len(u)) + 1):
-        for subset in combinations(range(len(u)), size):
-            value = ref_indicator(indicator, [u[i] for i in subset], d, kappa)
-            if _better(value, best_value):
-                best_value, best_subset = value, subset
-    return (best_value, best_subset)
+def ref_stability(actions_a, actions_b):
+    """The stability distance of Srivastava et al. (2007): one minus the
+    Jaccard measure of the two plans' action sets."""
+    a, b = set(actions_a), set(actions_b)
+    return 1.0 - len(a & b) / len(a | b) if a | b else 0.0
 
 
 def _pad(plans, held, target):

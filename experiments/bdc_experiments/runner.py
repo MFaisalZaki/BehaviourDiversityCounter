@@ -1,5 +1,11 @@
-"""Task ids, the shared setup every experiment opens with, and running one
-task with its traceback captured rather than lost.
+"""Task ids, the shared setup every task opens with, and running one task
+with its traceback captured rather than lost.
+
+Two kinds of task exist. ``select`` runs the four selections on one pool
+under one model, once, to the largest k any experiment reads; E1 and E2 are
+reports over those results, since the selection functions extend their
+answer one plan at a time and every smaller k is a prefix. ``time`` is E3's
+repeated, cold-clock timing of the second phase.
 """
 
 import importlib
@@ -15,10 +21,15 @@ from pathlib import Path
 from bdc_experiments import SCHEMA_VERSION, models, pools
 from bdc_experiments.config import load, results_root
 
-MODULES = {'e1': 'e1_case_study', 'e2': 'e2_separation', 'e3': 'e3_greedy_vs_optimum',
-           'e4': 'e4_fixed_size', 'e5': 'e5_resolution', 'e6': 'e6_cost'}
+#: The run-stage task kinds, and the reports built over their results.
+KINDS = {'select': 'select', 'time': 'timing'}
+REPORTS = {'e1': 'e1_case_study', 'e2': 'e2_separation', 'e3': 'e3_cost'}
 
 INDICATORS = ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty')
+
+#: The nine fields every row of every result carries, so that the reports can
+#: group and pair on them without knowing which task wrote them.
+BASE_FIELDS = ('instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b')
 
 
 class SkipTask(Exception):
@@ -26,10 +37,11 @@ class SkipTask(Exception):
     not the same thing as a failure and not the same thing as a zero."""
 
 
-def module(experiment):
-    if experiment not in MODULES:
-        raise ValueError(f"unknown experiment '{experiment}'; valid: {sorted(MODULES)}")
-    return importlib.import_module(f'bdc_experiments.{MODULES[experiment]}')
+def module(name):
+    table = {**KINDS, **REPORTS}
+    if name not in table:
+        raise ValueError(f"unknown task kind or report '{name}'; valid: {sorted(table)}")
+    return importlib.import_module(f'bdc_experiments.{table[name]}')
 
 
 def now():
@@ -49,32 +61,27 @@ def git_revision():
 # Tasks
 # ----------------------------------------------------------------------
 
-def default_tasks(cfg, experiment):
-    """One task per (pool, applicable model): what most experiments want."""
+def tasks(cfg, kind):
+    return module(kind).tasks(cfg)
+
+
+def pool_tasks(cfg, kind, sizes, specs_for):
+    """One task per (pool of a requested size, model): ``<kind>/<instance>/<pool>/<model>``."""
     ids = []
     for path in pools.pool_files(cfg):
         pool = pools.read_pool(path)
-        for spec in models.models_for(cfg, pool['domain']):
-            ids.append(f"{experiment}/{pool['instance']}/{path.stem}/{spec.name}")
+        if pool['requested'] in sizes:
+            ids += [f"{kind}/{pool['instance']}/{path.stem}/{spec.name}"
+                    for spec in specs_for(pool)]
     return ids
 
 
-def tasks(cfg, experiment):
-    """An experiment's own task list, or the default one."""
-    own = getattr(module(experiment), 'tasks', None)
-    return own(cfg) if own else default_tasks(cfg, experiment)
-
-
 def context(cfg, task_id):
-    """The pieces of a task id: ``<experiment>/<domain>/<ipc>/<stem>/<pool>[/...]``."""
-    experiment, *parts = task_id.split('/')
-    domain, ipc, stem, pool_stem, *extra = parts
-    return {
-        'experiment': experiment, 'task_id': task_id,
-        'instance': f'{domain}/{ipc}/{stem}', 'domain': domain, 'ipc': ipc, 'stem': stem,
-        'pool_stem': pool_stem, 'extra': extra,
-        'pool_path': results_root(cfg) / 'pools' / domain / stem / f'{pool_stem}.json',
-    }
+    """The pieces of a task id: ``<kind>/<domain>/<ipc>/<stem>/<pool>/<model>``."""
+    kind, domain, ipc, stem, pool_stem, model = task_id.split('/')
+    return {'kind': kind, 'task_id': task_id, 'instance': f'{domain}/{ipc}/{stem}',
+            'domain': domain, 'pool_stem': pool_stem, 'model': model,
+            'pool_path': results_root(cfg) / 'pools' / domain / stem / f'{pool_stem}.json'}
 
 
 def instance_info(cfg, pool):
@@ -83,7 +90,7 @@ def instance_info(cfg, pool):
             'resource_dir': results_root(cfg) / 'resources'}
 
 
-def setup(cfg, ctx, spec, trace_cache=None, loaded=None):
+def setup(cfg, ctx, spec, trace_cache=None):
     """Task, counter, cost-sorted pool, model record and behaviour dump."""
     pool = pools.read_pool(ctx['pool_path'])
     if not pool['plans']:
@@ -91,12 +98,13 @@ def setup(cfg, ctx, spec, trace_cache=None, loaded=None):
                        f"{' (the planner timed out)' if pool.get('timed_out') else ''}, "
                        f'so there is nothing to select from')
     task = pools.task_of(pool)
-    counter = models.build_counter(spec, task, instance_info(cfg, pool), trace_cache=trace_cache)
-    if loaded is None:
-        loaded = pools.load_pool(ctx['pool_path'], counter=counter, task=task)
-    record = models.model_record(spec, task, instance_info(cfg, pool))
-    dump = pools.behaviour_dump(cfg, counter, loaded, record)
-    return task, counter, loaded, record, dump
+    info = instance_info(cfg, pool)
+    counter = models.build_counter(spec, task, info, trace_cache=trace_cache)
+    loaded = pools.load_pool(ctx['pool_path'], counter=counter, task=task)
+    if not loaded['plans']:
+        raise SkipTask('no plan of the pool could be replayed against the task')
+    record = models.model_record(spec, counter, task, info)
+    return task, counter, loaded, record, pools.behaviour_dump(cfg, counter, loaded, record)
 
 
 # ----------------------------------------------------------------------
@@ -134,6 +142,14 @@ def selection_record(loaded, dump, selected, wall, cpu):
     }
 
 
+def base_row(loaded, dump, model_record, k=None, kappa=None):
+    """The nine mandatory fields, ready to be extended with the row's own."""
+    record = loaded['record']
+    return {'instance': record['instance'], 'domain': record['domain'], 'q': record['q'],
+            'N': record['requested'], 'model': model_record['name'], 'k': k, 'kappa': kappa,
+            'pool_size': record['size'], 'b': len(dump['distinct'])}
+
+
 @contextmanager
 def time_limit(seconds):
     """A task that runs away is a recorded failure, not a hung array job."""
@@ -152,25 +168,25 @@ def time_limit(seconds):
 # Running
 # ----------------------------------------------------------------------
 
-def result_path(cfg, experiment, task_id):
+def result_path(cfg, kind, task_id):
     """One file per task. The id's slashes become '__' so the directory stays
     flat and greppable; the id itself is inside the file."""
     tail = task_id.split('/', 1)[1].replace('/', '__')
-    return results_root(cfg) / 'results' / experiment / f'{tail}.json'
+    return results_root(cfg) / 'results' / kind / f'{tail}.json'
 
 
-def run_task(cfg, experiment, task_id, force=False):
+def run_task(cfg, kind, task_id, force=False):
     """Run one task and write its result file. Never raises for a task failure."""
-    path = result_path(cfg, experiment, task_id)
+    path = result_path(cfg, kind, task_id)
     if path.is_file() and not force:
         return json.loads(path.read_text())
     result = {'schema': 'result', 'version': SCHEMA_VERSION, 'task_id': task_id,
-              'experiment': experiment, 'config_hash': cfg['meta']['config_hash'],
+              'kind': kind, 'config_hash': cfg['meta']['config_hash'],
               'git': git_revision(), 'started': now(), 'ended': None, 'error': None,
               'pool': None, 'model': None, 'rows': [], 'extra': {}}
     try:
         with time_limit(cfg['run']['time_limit_selection_s']):
-            result.update(module(experiment).run_task(task_id, cfg))
+            result.update(module(kind).run_task(task_id, cfg))
     except SkipTask as nothing:
         result['extra'] = dict(result['extra'], skipped=str(nothing))
     except Exception as failure:
@@ -183,18 +199,18 @@ def run_task(cfg, experiment, task_id, force=False):
 
 
 def _worker(arguments):
-    config_path, results_dir, experiment, task_id, force = arguments
+    config_path, results_dir, kind, task_id, force = arguments
     cfg = load(config_path, results_dir=results_dir)
-    result = run_task(cfg, experiment, task_id, force=force)
+    result = run_task(cfg, kind, task_id, force=force)
     return task_id, result.get('error'), bool(result.get('extra', {}).get('skipped'))
 
 
-def run(cfg, experiment, only=None, force=False, jobs=1, log=print):
-    """Phase two over an experiment's tasks; resumable, one file each."""
-    ids = [t for t in tasks(cfg, experiment) if only is None or t == only]
+def run(cfg, kind, only=None, force=False, jobs=1, log=print):
+    """Phase two over a kind's tasks; resumable, one file each."""
+    ids = [t for t in tasks(cfg, kind) if only is None or t == only]
     if only is not None and not ids:
-        raise ValueError(f"no task '{only}' in {experiment}")
-    arguments = [(cfg['meta']['config_path'], cfg['run']['results_dir'], experiment, t, force)
+        raise ValueError(f"no task '{only}' in {kind}")
+    arguments = [(cfg['meta']['config_path'], cfg['run']['results_dir'], kind, t, force)
                  for t in ids]
     counts = {'ok': 0, 'failed': 0, 'skipped': 0}
     if jobs > 1:
@@ -209,40 +225,15 @@ def run(cfg, experiment, only=None, force=False, jobs=1, log=print):
     return counts
 
 
-def load_results(cfg, experiment):
-    """Every result file of an experiment, in a stable order."""
-    root = results_root(cfg) / 'results' / experiment
+def load_results(cfg, kind):
+    """Every result file of a task kind, in a stable order."""
+    root = results_root(cfg) / 'results' / kind
     return [json.loads(path.read_text()) for path in sorted(root.glob('*.json'))] if root.is_dir() else []
 
 
-def dump_file(cfg, model_hash, domain, stem, pool_stem):
-    return results_root(cfg) / 'behaviours' / model_hash / domain / stem / f'{pool_stem}.json'
-
-
-def load_dump(cfg, model_hash, domain, stem, pool_stem):
-    path = dump_file(cfg, model_hash, domain, stem, pool_stem)
+def load_dump(cfg, result):
+    """The behaviour dump a result's numbers are indexed into."""
+    pool = result['pool']
+    path = (results_root(cfg) / 'behaviours' / result['model']['hash'] / pool['domain']
+            / pool['instance'].split('/')[-1] / f"{pool['pool_stem']}.json")
     return json.loads(path.read_text()) if path.is_file() else None
-
-
-def load_summary(cfg, model_hash, domain, stem, pool_stem):
-    """A dump's b, pool size and behaviour tuples, without its matrix.
-
-    For a question like "how many behaviours does this pool expose?", asked of
-    every candidate pool before one is chosen, parsing the b x b matrix is most
-    of the work and none of the answer.
-    """
-    path = pools.summary_path(dump_file(cfg, model_hash, domain, stem, pool_stem))
-    return json.loads(path.read_text()) if path.is_file() else None
-
-
-#: The nine fields every row of every experiment carries, so that the reports
-#: can group and pair on them without knowing which experiment wrote them.
-BASE_FIELDS = ('instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b')
-
-
-def base_row(loaded, dump, model_record, k=None, kappa=None):
-    """The nine mandatory fields, ready to be extended with the row's own."""
-    record = loaded['record']
-    return {'instance': record['instance'], 'domain': record['domain'], 'q': record['q'],
-            'N': record['requested'], 'model': model_record['name'], 'k': k, 'kappa': kappa,
-            'pool_size': record['size'], 'b': len(dump['distinct'])}

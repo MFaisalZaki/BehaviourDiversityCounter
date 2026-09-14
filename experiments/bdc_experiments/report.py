@@ -2,7 +2,8 @@
 third, and one manifest naming the code, the data and the counts behind them.
 
 Reports are pure functions of the raw dumps. Nothing here loads a pool, builds
-a counter or runs a selection.
+a counter or runs a selection: a selected set at k is the first k plans of the
+recorded run, and its indicators are read off the behaviour dump's matrix.
 """
 
 import csv
@@ -13,8 +14,9 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
-from bdc_experiments import SCHEMA_VERSION
+from bdc_experiments import SCHEMA_VERSION, reference
 from bdc_experiments.config import results_root
+from bdc_experiments.runner import INDICATORS, load_dump, load_results
 
 #: Okabe-Ito, safe under the three common colour vision deficiencies.
 PALETTE = ('#0072B2', '#D55E00', '#009E73', '#CC79A7', '#E69F00', '#56B4E9', '#F0E442', '#000000')
@@ -25,11 +27,11 @@ TIE_RULE = ('Ties are broken deterministically by the lowest index in the '
             'cost-sorted pool, at the opening pair and at every later step.')
 
 PACKAGES = ('behaviour-diversity-counter', 'unified-planning', 'numpy', 'scipy',
-            'pandas', 'matplotlib', 'up-symk', 'lark')
+            'matplotlib', 'up-symk', 'lark')
 
 
-def report_dir(cfg, experiment):
-    path = results_root(cfg) / 'reports' / experiment
+def report_dir(cfg, name):
+    path = results_root(cfg) / 'reports' / name
     (path / 'tables').mkdir(parents=True, exist_ok=True)
     (path / 'figures').mkdir(parents=True, exist_ok=True)
     return path
@@ -84,6 +86,63 @@ def table(path, label, caption, columns, rows, digits=3, aligns=None):
               rf'  \caption{{{caption}}}', rf'  \label{{{label}}}', r'\end{table}', '']
     path.write_text('\n'.join(lines))
     return path
+
+
+# ----------------------------------------------------------------------
+# Reading the selection results
+# ----------------------------------------------------------------------
+
+def usable(results):
+    """The results a report may read numbers from: neither failed nor skipped."""
+    return [r for r in results
+            if not r.get('error') and not (r.get('extra') or {}).get('skipped')]
+
+
+def selections(cfg, keep=lambda name: True):
+    """The usable selection results whose model name ``keep`` accepts, each
+    with its behaviour dump attached under ``dump``."""
+    found = []
+    for result in usable(load_results(cfg, 'select')):
+        if keep(result['model']['name']):
+            result['dump'] = load_dump(cfg, result)
+            found.append(result)
+    return found
+
+
+def by_pool(results):
+    """``(instance, pool_stem) -> {model name: result}``."""
+    grouped = {}
+    for result in results:
+        pool = result['pool']
+        grouped.setdefault((pool['instance'], pool['pool_stem']), {})[result['model']['name']] = result
+    return grouped
+
+
+def entry(result, indicator, kappa):
+    """The recorded run of one selection: kappa is matched for B-Novelty and
+    ignored for the three kappa-free rules, which were run once."""
+    return next(e for e in result['extra']['selections']
+                if e['indicator'] == indicator and (indicator != 'bnovelty' or e['kappa'] == kappa))
+
+
+def score(dump, chosen, kappa):
+    """The four indicators of a set of behaviours, given as indices into the
+    dump's ``distinct`` list (repeats allowed), off the dump's matrix. Under
+    the stability model there is no matrix and the tuple is the action set."""
+    if dump['matrix'] is not None:
+        d = lambda i, j: dump['matrix'][i][j]
+    else:
+        d = lambda i, j: reference.ref_stability(dump['distinct'][i][0].split(' ; '),
+                                                 dump['distinct'][j][0].split(' ; '))
+    return {name: reference.ref_indicator(name, list(chosen), d, kappa) for name in INDICATORS}
+
+
+def head(result, k=None, kappa=None):
+    """The nine mandatory fields of a row about this result."""
+    pool, dump = result['pool'], result['dump']
+    return {'instance': pool['instance'], 'domain': pool['domain'], 'q': pool['q'],
+            'N': pool['requested'], 'model': result['model']['name'], 'k': k, 'kappa': kappa,
+            'pool_size': pool['size'], 'b': len(dump['distinct'])}
 
 
 # ----------------------------------------------------------------------
@@ -156,18 +215,37 @@ def pooled(rows, value_key):
     return statistics.fmean(values) if values else None
 
 
+def group(rows, keys):
+    """``tuple of key values -> rows``, in first-appearance order."""
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(tuple(row.get(key) for key in keys), []).append(row)
+    return grouped
+
+
+def summary_rows(rows, keys, value_key):
+    """One row per group: n, median, IQR, and the pooled and macro means."""
+    out = []
+    for values, members in group(rows, keys).items():
+        summary = {**dict(zip(keys, values)), **summarise([r.get(value_key) for r in members]),
+                   'pooled_mean': pooled(members, value_key), 'macro_mean': macro(members, value_key)}
+        out.append(summary)
+    return out
+
+
 # ----------------------------------------------------------------------
 # Figures
 # ----------------------------------------------------------------------
 
-def figure(size=(5.2, 3.2)):
+def figure(size=(5.2, 3.2), **kwargs):
     """A matplotlib figure with no title text: the caption carries the words."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(figsize=size)
-    ax.set_prop_cycle(color=list(PALETTE))
-    return fig, ax
+    fig, axes = plt.subplots(figsize=size, **kwargs)
+    for ax in (axes.flat if hasattr(axes, 'flat') else [axes]):
+        ax.set_prop_cycle(color=list(PALETTE))
+    return fig, axes
 
 
 def save(fig, path):
@@ -183,8 +261,30 @@ def save(fig, path):
     return path
 
 
+def boxes(ax, groups, series, values_of):
+    """Grouped box plots: one box per (group, series), a colour per series.
+    ``values_of(group, s)`` gives the sample; empty samples are left out."""
+    width = 0.8 / max(len(series), 1)
+    for offset, s in enumerate(series):
+        colour = PALETTE[offset % len(PALETTE)]
+        samples = {i: values_of(g, s) for i, g in enumerate(groups)}
+        samples = {i: v for i, v in samples.items() if v}
+        if samples:
+            drawn = ax.boxplot(list(samples.values()), patch_artist=True, manage_ticks=False,
+                               widths=width * 0.8,
+                               positions=[i + (offset - (len(series) - 1) / 2) * width
+                                          for i in samples])
+            for box in drawn['boxes']:
+                box.set_facecolor(colour)
+            for median in drawn['medians']:
+                median.set_color('black')
+        ax.plot([], [], color=colour, linewidth=6, label=str(s))
+    ax.set_xticks(range(len(groups)))
+    ax.set_xticklabels([str(g) for g in groups])
+
+
 # ----------------------------------------------------------------------
-# The manifest
+# The manifest, and the setup report
 # ----------------------------------------------------------------------
 
 def versions():
@@ -197,18 +297,17 @@ def versions():
     return found
 
 
-def manifest(cfg, experiment, outputs, results, extra=None):
-    """One per experiment: the code, the data and the counts behind the tables."""
+def manifest(cfg, name, outputs, results, extra=None):
+    """One per report: the code, the data and the counts behind the tables."""
+    from bdc_experiments import benchmark
     from bdc_experiments.generate import SEARCH
     from bdc_experiments.runner import git_revision
-    from bdc_experiments import benchmark
     counts = {'total': len(results),
               'failed': sum(1 for r in results if r.get('error')),
-              'skipped': sum(1 for r in results if r.get('extra', {}).get('skipped')),
-              }
+              'skipped': sum(1 for r in results if (r.get('extra') or {}).get('skipped'))}
     counts['ok'] = counts['total'] - counts['failed'] - counts['skipped']
     record = {
-        'schema': 'manifest', 'version': SCHEMA_VERSION, 'experiment': experiment,
+        'schema': 'manifest', 'version': SCHEMA_VERSION, 'report': name,
         'written': datetime.now(timezone.utc).isoformat(),
         'git': git_revision(),
         'config': {'path': cfg['meta']['config_path'], 'hash': cfg['meta']['config_hash'],
@@ -221,6 +320,7 @@ def manifest(cfg, experiment, outputs, results, extra=None):
                     'memory_limit_mb': cfg['run']['memory_limit_generation_mb']},
         'selection_time_limit_s': cfg['run']['time_limit_selection_s'],
         'seed': cfg['run']['seed'],
+        'selection_grid': dict(cfg['selection']),
         'packages': versions(),
         'python': platform.python_version(),
         'platform': {'system': platform.system(), 'release': platform.release(),
@@ -234,16 +334,15 @@ def manifest(cfg, experiment, outputs, results, extra=None):
     }
     if extra:
         record['extra'] = extra
-    path = report_dir(cfg, experiment) / 'manifest.json'
+    path = report_dir(cfg, name) / 'manifest.json'
     path.write_text(json.dumps(record, indent=1))
     return path
-
 
 
 def setup_report(cfg):
     """The two files the paper's Setup subsection consumes, from the pools alone."""
     from bdc_experiments import models, pools
-    rows, per_domain = [], {}
+    per_domain = {}
     for path in pools.pool_files(cfg):
         pool = json.loads(path.read_text())
         entry = per_domain.setdefault(pool['domain'], {
@@ -257,16 +356,14 @@ def setup_report(cfg):
         entry['plans'] += len(pool['plans'])
         key = f"pools_q{pool['q']}"
         entry[key] = entry.get(key, 0) + 1
-    for entry in per_domain.values():
-        entry['instances'] = len(entry['instances'])
-        rows.append(entry)
-    rows.sort(key=lambda row: row['domain'])
+    rows = sorted(({**e, 'instances': len(e['instances'])} for e in per_domain.values()),
+                  key=lambda row: row['domain'])
     columns = ['domain', 'ipc_year', 'instances', 'pools'] + \
         sorted({key for row in rows for key in row if key.startswith('pools_q')}) + \
         ['exhausted', 'timed_out', 'empty', 'plans']
 
     model_rows = []
-    for spec in models.registry(cfg).values():
+    for spec in [models.generic_spec(cfg), *models.PER_DOMAIN, models.STABILITY]:
         for feature in spec.features:
             description, size_rule, dissimilarity = models.DIMENSION_DOC[feature.key]
             model_rows.append({
@@ -276,62 +373,23 @@ def setup_report(cfg):
                 'params': json.dumps(models._sortable(feature.params)),
                 'dimension_size_rule': size_rule, 'dissimilarity': dissimilarity,
                 'weight': feature.weight if feature.weight is not None
-                          else f'uniform 1/{len(spec.features)}',
-            })
+                          else f'uniform 1/{len(spec.features)}'})
 
     out = report_dir(cfg, 'setup')
-    written = [write_csv(out / 'benchmark.csv', rows, columns),
-               write_csv(out / 'models.csv', model_rows)]
-    written.append(table(
-        out / 'tables' / 'setup_benchmark.tex', 'tab:setup-benchmark',
-        'Benchmark domains, the instances phase one solved and the pools it produced.',
-        columns, [[row.get(column) for column in columns] for row in rows], digits=0))
     model_columns = ['model', 'domains', 'feature', 'dimension_size_rule', 'dissimilarity', 'weight']
-    written.append(table(
-        out / 'tables' / 'setup_models.tex', 'tab:setup-models',
-        'The diversity models: one generic control on every domain, and the '
-        'domain-specific models written by the authors as domain expert.',
-        model_columns, [[row[column] for column in model_columns] for row in model_rows],
-        aligns='llll' + 'l' + 'r'))
-    written.append(manifest(cfg, 'setup', written, []))
-    return written
-
-
-def usable(results):
-    """The results a report may read numbers from: neither failed nor skipped."""
-    return [r for r in results
-            if not r.get('error') and not (r.get('extra') or {}).get('skipped')]
-
-
-def all_rows(results, **where):
-    """Every row of every usable result, optionally filtered on row fields."""
-    rows = [row for result in usable(results) for row in result.get('rows', [])]
-    for key, value in where.items():
-        rows = [row for row in rows if row.get(key) == value]
-    return rows
-
-
-def group(rows, keys):
-    """``tuple of key values -> rows``, in first-appearance order."""
-    grouped = {}
-    for row in rows:
-        grouped.setdefault(tuple(row.get(key) for key in keys), []).append(row)
-    return grouped
-
-
-def summary_rows(rows, keys, value_key, extra=None):
-    """One summary row per group: n, median, IQR, and the pooled and macro means.
-
-    This is the shape every experiment's summary table wants, so that a table
-    can show both aggregations without each report rebuilding the arithmetic.
-    """
-    summaries = []
-    for values, members in group(rows, keys).items():
-        summary = dict(zip(keys, values))
-        summary.update(summarise([row.get(value_key) for row in members]))
-        summary['pooled_mean'] = pooled(members, value_key)
-        summary['macro_mean'] = macro(members, value_key)
-        if extra:
-            summary.update(extra(members))
-        summaries.append(summary)
-    return summaries
+    written = [
+        write_csv(out / 'benchmark.csv', rows, columns),
+        write_csv(out / 'models.csv', model_rows),
+        table(out / 'tables' / 'setup_benchmark.tex', 'tab:setup-benchmark',
+              'Benchmark domains, the instances phase one solved and the pools it produced.',
+              columns, [[row.get(column) for column in columns] for row in rows], digits=0),
+        table(out / 'tables' / 'setup_models.tex', 'tab:setup-models',
+              'The diversity models: the generic control on every domain, the domain-specific '
+              'models written by the authors as domain expert, and the literature\'s model as '
+              'one feature, the stability distance over action sets. E2 reweights the '
+              'astronaut\'s model and E3 varies the generic model\'s feature count; those '
+              'variants are named in the result files.',
+              model_columns, [[row[column] for column in model_columns] for row in model_rows],
+              aligns='lllllr'),
+    ]
+    return written + [manifest(cfg, 'setup', written, [])]

@@ -103,7 +103,7 @@ def generate(cfg, instance, mode, q, n, force=False):
         command = [sys.executable, str(driver), '--plan-file', 'sas_plan',
                    instance['domain_file'], instance['problem_file'], '--search', search]
         # The planner is a subprocess, so its CPU is the *children's* rusage and
-        # not this process's. E6 compares the second phase's cost against the
+        # not this process's. E3 compares the second phase's cost against the
         # first phase's, and time.process_time here would have measured the
         # parent waiting -- close to zero, and the comparison meaningless.
         # Generation is serial, so no other child is reaped inside the delta.
@@ -167,11 +167,12 @@ def _kill(work):
 
 
 def combinations(cfg):
-    """Every ``(mode, q, n)`` phase one is asked for."""
+    """Every ``(mode, q, n)`` phase one is asked for: the selection sweep's
+    pool sizes and the sizes E3 times the second phase against."""
     return [(mode, q, n)
             for mode in cfg['generation']['modes']
             for q in cfg['generation']['q_values']
-            for n in cfg['generation']['pool_sizes']]
+            for n in sorted(set(cfg['generation']['pool_sizes']) | set(cfg['e3']['pool_sizes']))]
 
 
 def run(cfg, instances, force=False, only=None, log=print):

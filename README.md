@@ -231,12 +231,13 @@ thing the field's value would buy here is a second name for B-MaxSum on small po
 Every dimension implements `distance()`, normalised into `[0, 1]` before its weight as the
 paper's definition of a feature requires, so the weights are the only place one dimension
 counts for more than another. Each is definite (zero exactly on equal values) and a
-metric, so the paper's greedy guarantees, which need the triangle inequality, apply to
+metric, so the definiteness assumption the paper's twinning theorem rests on holds for
 any combination of them:
 
 | dimension | distance |
 | --- | --- |
 | `go` | Hamming over the two orderings, divided by the number of goals |
+| `stability` | the literature's model as one feature: the behaviour is the plan's action set and the distance is `1 - Jaccard` over two such sets (the stability distance of Srivastava et al.) |
 | `cb` | `abs(c1 - c2) / max(c1, c2)` over the two plan costs |
 | `ru` | Jaccard distance — `1 - |A ∩ B| / |A ∪ B|` — over the used sets |
 | `rc` | weighted Jaccard over the count vectors — `1 - Σ min(c, c') / Σ max(c, c')`; the `ru` distance when every count is 0 or 1 |
@@ -252,12 +253,10 @@ serves every indicator. `k` plans come back whenever the pool holds that many.
 
 - `'bcoverage'` (the default) takes one plan per behaviour, in the order the behaviours
   first appear in the pool, and stops after `k`. Which plan represents a behaviour is left
-  open by the paper's greedy-optimality theorem, and the paper takes the **cheapest plan in
-  the pool that exhibits it**, as MAP-Elites keeps the fittest solution per cell; cost ties
-  fall to the earliest plan. Once every behaviour is covered, the remaining slots are
-  filled with duplicates in pool order, which leave the indicator unchanged. It calls no
-  distance function at all, and it is exact rather than approximate: every plan covers
-  exactly one behaviour, so `min(k, b)` behaviours come back from a pool exhibiting `b`.
+  open by the paper, which takes the **cheapest plan in the pool that exhibits it**, as
+  MAP-Elites keeps the fittest solution per cell; cost ties fall to the earliest plan. Once
+  every behaviour is covered, the remaining slots are filled with duplicates in pool order,
+  which leave the indicator unchanged. It calls no distance function at all.
 - `'bmaxsum'` and `'bmaxmin'` are **one greedy rule under two aggregators**, after the
   shape [IBM diversescore](https://github.com/IBM/diversescore) uses — there, one scoring
   routine takes an `aggregator_metric` instead of each metric bringing its own
@@ -266,10 +265,13 @@ serves every indicator. `k` plans come back whenever the pool holds that many.
   newly selected behaviour into what remains. The aggregator is the only thing that
   changes inside the loop:
 
-  | indicator | aggregator | paper's procedure | guarantee |
-  | --- | --- | --- | --- |
-  | `'bmaxsum'` | `+` | greedy max-sum dispersion (Ravi et al.) | ½ of the optimum under the triangle inequality |
-  | `'bmaxmin'` | `min` | farthest-first | ½ of the optimum, for sets of exactly `k`, under the triangle inequality |
+  | indicator | aggregator | paper's procedure |
+  | --- | --- | --- |
+  | `'bmaxsum'` | `+` | the greedy of Katz and Sohrabi (2020) |
+  | `'bmaxmin'` | `min` | farthest-first (Ravi et al. 1994) |
+
+  The paper adopts both from the literature and makes no claim about how close either
+  comes to the optimum.
 
   **Both open on the farthest pair.** A singleton set has no pairs, so it scores zero
   under either operator — the opening pick gets no signal from the objective, and
@@ -374,12 +376,14 @@ the code, so a change in what a dimension *means* shows up as a failure.
 
 The empirical evaluation lives in `experiments/` as the package `bdc_experiments`, with its
 own CLI: `bdcexp generate | run | report` builds pools of plans with SymK over the
-`classical-domains` benchmark, runs the six experiments of the paper's Section 5 over them,
-and writes the CSVs, LaTeX tables and figures those subsections consume. Everything it
-produces goes under one `runs/<name>/` directory, which is the artefact that ships with the
-paper: the pools with their plans, a behaviour dump per model and pool holding every
-behaviour and the full dissimilarity matrix, one raw result file per task, and reports that
-are a pure function of those two. [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) is how to run
+`classical-domains` benchmark, runs one selection sweep and one timing sweep over them, and
+writes the CSVs, LaTeX tables and figures the six subsections of the paper's evaluation
+consume. Five of the six questions read the same selection sweep, since a selection at
+any smaller `k` is a prefix of the run to the largest. Everything it produces goes under
+one `runs/<name>/` directory, which is the artefact that ships with the paper: the pools
+with their plans, a behaviour dump per model and pool holding every behaviour and the
+dissimilarity matrix, one raw result file per task, and reports that are a pure function
+of those two. [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) is how to run
 it and what every output means.
 
 Before any experiment was allowed to depend on this library, it was audited against an
