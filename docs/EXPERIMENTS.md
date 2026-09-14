@@ -97,8 +97,9 @@ bdcexp report smoke e3
 `configs/smoke.toml` runs against four pools committed under
 `configs/smoke_pools/`, with the PDDL they were generated from beside them, so
 it needs neither SymK nor the benchmark checkout. The first `run` copies those
-pools into the run directory. This is what the tests and CI use; the whole
-suite finishes in well under two minutes.
+pools into the run directory -- `--list` included, since listing the tasks
+means listing the pools they run over. This is what the tests and CI use; the
+whole suite finishes in well under two minutes.
 
 ## The output directory
 

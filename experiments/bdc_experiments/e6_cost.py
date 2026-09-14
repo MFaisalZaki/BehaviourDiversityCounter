@@ -19,9 +19,9 @@ from bdc_experiments import report as rp
 
 BASE = ['instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b']
 
-COLUMNS = BASE + ['pool_stem', 'features', 'phase', 'indicator', 'repeat', 'wall_s', 'cpu_s',
-                  'generation_wall_s', 'generation_cpu_s', 'wall_over_generation',
-                  'cpu_over_generation', 'exhausted']
+COLUMNS = BASE + ['k_requested', 'pool_stem', 'features', 'phase', 'indicator', 'repeat',
+                  'wall_s', 'cpu_s', 'generation_wall_s', 'generation_cpu_s',
+                  'wall_over_generation', 'cpu_over_generation', 'exhausted']
 
 COST = ('O(k n c_ext + b^2 n c_dist): k n behaviour extractions over n features, and the '
         'b^2 distances between the distinct behaviours')
@@ -29,17 +29,21 @@ COST = ('O(k n c_ext + b^2 n c_dist): k n behaviour extractions over n features,
 #: How the two phases are isolated from one another, said wherever a number is.
 PROTOCOL = ('A mapping sample builds a fresh counter -- construction included in the sample -- '
             'with no trace cache, and maps the whole pool, so it pays the replay and the feature '
-            'extraction. A selection sample builds a fresh counter too, with an empty behaviour '
-            'and distance cache, but shares the task-wide trace cache and is mapped untimed '
-            'first, so it pays the distances and the greedy and not the replay. Samples are taken '
-            'at every k and every kappa the config lists.')
+            'extraction. The selection samples of one model share a single counter, built over '
+            'the task-wide trace cache and mapped once, untimed; only its behaviour-distance '
+            'cache is cleared before each sample, so a sample pays the distances and the greedy '
+            'cold and the replay not at all. Samples are taken at every k the config lists. '
+            'kappa reaches B-Novelty alone, so the other three indicators are timed at the first '
+            'configured kappa rather than repeatedly at each of them.')
 
 #: Why the planner is compared on the wall clock and not on the CPU one.
-GENERATION_CLOCK = ('The planner runs as a subprocess, and the pool record measures it with the '
-                    "parent's time.process_time as well as its wall clock, so generation_cpu_s "
-                    "excludes the planner's own CPU. Only the wall-clock comparison is like for "
-                    'like. Both ratios are in e6_timing.csv; the table and the figure '
-                    'use the wall clock.')
+GENERATION_CLOCK = ('The planner runs as a subprocess, so the pool record measures its CPU with '
+                    "getrusage(RUSAGE_CHILDREN) around the call rather than the parent's "
+                    'process_time, and generation_cpu_s is the planner\'s own CPU. Both ratios '
+                    'are in e6_timing.csv; the table and the figure use the wall clock, which is '
+                    'the clock a user waits on. A pool generated before this was corrected '
+                    "carries a generation_cpu_s of nearly zero -- the parent's wait -- and the "
+                    'cpu_over_generation column is then meaningless for it.')
 
 NO_FIT = ('The lines in the figures are reference slopes, positioned to pass through the median '
           'sample; no curve was fitted to these data.')
@@ -132,7 +136,7 @@ def run_task(task_id, cfg):
             continue
         base = {**runner.base_row(loaded, variant_dump, variant_record),
                 'pool_stem': record['pool_stem'], 'features': n, 'indicator': None,
-                'generation_wall_s': record['generation_wall_s'],
+                'k_requested': None, 'generation_wall_s': record['generation_wall_s'],
                 'generation_cpu_s': record['generation_cpu_s'], 'exhausted': record['exhausted']}
 
         mapping = []
@@ -145,18 +149,26 @@ def run_task(task_id, cfg):
             rows.append(_row(base, mapping[-1], 'mapping'))
 
         selections = []
-        for k, kappa, indicator, repeat in product(cfg['selection']['k_values'],
-                                                   cfg['selection']['kappa_values'],
-                                                   runner.INDICATORS, repeats):
-            warm = models.build_counter(variant, task, info, trace_cache=trace)
-            warm.b_coverage(plans)                     # timed above, so not timed again here
-            selected, wall, cpu = runner.select(warm, plans, min(k, len(plans)), indicator, kappa)
-            selections.append({'k': min(k, len(plans)), 'k_requested': k, 'kappa': kappa,
-                               'indicator': indicator, 'repeat': repeat,
-                               **runner.selection_record(loaded, variant_dump, selected,
-                                                         wall, cpu)})
-            rows.append(_row(base, {'repeat': repeat, 'wall_s': wall, 'cpu_s': cpu}, 'selection',
-                             indicator=indicator, k=min(k, len(plans)), kappa=kappa))
+        kappas = cfg['selection']['kappa_values']
+        # One counter for every selection sample of this model, mapped once and
+        # untimed: a remap per sample outweighs the sample itself on a big pool.
+        warm = models.build_counter(variant, task, info, trace_cache=trace)
+        warm.b_coverage(plans)                         # timed above, so not timed again here
+        for k, indicator, repeat in product(cfg['selection']['k_values'],
+                                            runner.INDICATORS, repeats):
+            # k_nn is read by the B-Novelty rule and by no other, so timing the
+            # other three at every kappa would repeat one computation.
+            for kappa in (kappas if indicator == 'bnovelty' else kappas[:1]):
+                warm._behaviour_distance_cache.clear()   # no public reset; every sample pays b^2
+                taken = min(k, len(plans))
+                selected, wall, cpu = runner.select(warm, plans, taken, indicator, kappa)
+                selections.append({'k': taken, 'k_requested': k, 'kappa': kappa,
+                                   'indicator': indicator, 'repeat': repeat,
+                                   **runner.selection_record(loaded, variant_dump, selected,
+                                                             wall, cpu)})
+                rows.append(_row(base, {'repeat': repeat, 'wall_s': wall, 'cpu_s': cpu},
+                                 'selection', indicator=indicator, k=taken, k_requested=k,
+                                 kappa=kappa))
 
         timed.append({'name': variant.name, 'features': n, 'model': variant_record,
                       'b': len(variant_dump['distinct']), 'space_size': models.space_size(built),
@@ -182,8 +194,18 @@ def _median(members, key):
     return statistics.median(values) if values else None
 
 
+def _tex(text):
+    """Prose written for the JSON dumps, made safe to read as LaTeX text."""
+    return text.replace('_', r'\_')
+
+
 def _medians(rows, keys):
-    """Per group: both clocks as median and IQR, and the CPU time two ways."""
+    """Per group: both clocks as median and IQR, and the CPU time two ways.
+
+    The model is one of the keys: grouped on the feature count alone, the
+    generic variants would pool with the per-domain models, whose dimensions
+    cost differently to extract, and n would be read off a model mix.
+    """
     out = []
     for values, members in rp.group(rows, keys).items():
         wall, cpu = (rp.summarise([m['wall_s'] for m in members]),
@@ -198,8 +220,10 @@ def _medians(rows, keys):
                     'generation_wall_median': _median(members, 'generation_wall_s'),
                     'generation_cpu_median': _median(members, 'generation_cpu_s'),
                     'wall_over_generation_median': _median(members, 'wall_over_generation'),
-                    'cpu_over_generation_median': _median(members, 'cpu_over_generation')})
-    return sorted(out, key=lambda row: (row['N'], row['phase'], row['features'],
+                    'cpu_over_generation_median': _median(members, 'cpu_over_generation'),
+                    'wall_over_generation_macro': rp.macro(members, 'wall_over_generation'),
+                    'cpu_over_generation_macro': rp.macro(members, 'cpu_over_generation')})
+    return sorted(out, key=lambda row: (row['N'], row['phase'], row['features'], row['model'],
                                         row['k'] or 0, row['indicator'] or ''))
 
 
@@ -214,10 +238,10 @@ def _slope(ax, points, exponent, label):
     return True
 
 
-def _scatter(ax, points, offset, label, marker=None):
+def _scatter(ax, points, offset, label, marker=None, area=14):
     """One series of samples, as open markers."""
     if points:
-        ax.scatter([x for x, _ in points], [y for _, y in points], s=14, alpha=0.7,
+        ax.scatter([x for x, _ in points], [y for _, y in points], s=area, alpha=0.7,
                    marker=marker or MARKERS[offset % len(MARKERS)], facecolors='none',
                    linewidths=0.8, edgecolors=rp.PALETTE[offset % len(rp.PALETTE)], label=label)
     return points
@@ -234,11 +258,12 @@ def _mapping_figure(rows, path):
     _scatter(ax, sorted({(r['pool_size'], r['generation_wall_s']) for r in mapping
                          if r['generation_wall_s']}), len(rp.PALETTE) - 1, 'pool generation',
              marker='P')
-    drawn = _slope(ax, points, 1, 'reference slope 1 in $n$ (no fit)')
+    # n is the feature count throughout E6, so the pool size is |P| and never n.
+    drawn = _slope(ax, points, 1, 'reference slope 1 in $|P|$ (no fit)')
     if points:
         ax.set_xscale('log')
         ax.set_yscale('log')
-    ax.set_xlabel('pool size $n$')
+    ax.set_xlabel('pool size $|P|$')
     ax.set_ylabel('wall-clock time (s)')
     if points:
         ax.legend(fontsize='small')
@@ -246,57 +271,74 @@ def _mapping_figure(rows, path):
 
 
 def _selection_figure(rows, path):
-    """Selection CPU time against b, one colour per indicator."""
+    """Selection CPU time against b, one colour per indicator, marker area per
+    pool size: a selection's cost moves with the pool size as well as with b,
+    so the slope in b is only readable within one pool size."""
     fig, ax = rp.figure()
     selection = [r for r in rows if r['phase'] == 'selection' and r['b'] and r['cpu_s'] > 0]
-    points = []
+    sizes = sorted({r['pool_size'] for r in selection})
     for offset, indicator in enumerate(runner.INDICATORS):
-        points += _scatter(ax, [(r['b'], r['cpu_s']) for r in selection
-                                if r['indicator'] == indicator], offset, indicator)
-    drawn = _slope(ax, points, 2, 'reference slope 2 in $b$ (no fit)')
-    if points:
+        for rank, size in enumerate(sizes):
+            _scatter(ax, [(r['b'], r['cpu_s']) for r in selection
+                          if r['indicator'] == indicator and r['pool_size'] == size],
+                     offset, indicator if rank == 0 else None, area=10 + 12 * rank)
+    # Positioned within the largest pool size alone, so that the eye is not
+    # asked to read a slope in b off variation that is really in the pool size.
+    biggest = sizes[-1] if sizes else None
+    drawn = _slope(ax, [(r['b'], r['cpu_s']) for r in selection if r['pool_size'] == biggest], 2,
+                   f'reference slope 2 in $b$ at pool size {biggest} (no fit)')
+    if selection:
         ax.set_xscale('log')
         ax.set_yscale('log')
     ax.set_xlabel('distinct behaviours $b$')
     ax.set_ylabel('selection CPU time (s)')
-    if points:
+    if selection:
         ax.legend(fontsize='small')
-    return rp.save(fig, path), drawn
+    return rp.save(fig, path), bool(drawn)
 
 
 def report(cfg, results):
     """Every sample, the medians per (N, k), and the two log-log figures."""
     out = rp.report_dir(cfg, 'e6')
     rows = rp.all_rows(results)
-    medians = _medians(rows, ('N', 'k', 'features', 'phase', 'indicator'))
+    medians = _medians(rows, ('N', 'k', 'model', 'features', 'phase', 'indicator'))
     figures = out / 'figures'
     mapping_path, mapping_slope = _mapping_figure(rows, figures / 'e6_mapping_vs_generation.pdf')
     selection_path, selection_slope = _selection_figure(rows, figures / 'e6_selection_vs_b.pdf')
 
-    columns = ['N', 'k', 'features', 'phase', 'indicator', 'samples', 'wall_median', 'wall_q1',
-               'wall_q3', 'cpu_median', 'cpu_q1', 'cpu_q3', 'cpu_pooled_mean', 'cpu_macro_mean',
-               'pool_size_median', 'b_median', 'generation_wall_median', 'generation_cpu_median',
-               'wall_over_generation_median', 'cpu_over_generation_median']
+    columns = ['N', 'k', 'model', 'features', 'phase', 'indicator', 'samples', 'wall_median',
+               'wall_q1', 'wall_q3', 'cpu_median', 'cpu_q1', 'cpu_q3', 'cpu_pooled_mean',
+               'cpu_macro_mean', 'pool_size_median', 'b_median', 'generation_wall_median',
+               'generation_cpu_median', 'wall_over_generation_median',
+               'wall_over_generation_macro', 'cpu_over_generation_median',
+               'cpu_over_generation_macro']
     written = [
         rp.write_csv(out / 'e6_timing.csv', rows, COLUMNS),
         rp.write_csv(out / 'e6_medians.csv', medians, columns),
         rp.table(out / 'tables' / 'e6_medians.tex', 'tab:e6-medians',
-                 'Median cost of the second phase per requested pool size $N$ and selection size '
-                 '$k$: mapping a whole pool into the behaviour space, and one selection. $n$ is '
-                 'the number of features of the model timed; mapping rows have no $k$ and no '
-                 'indicator. Every sample, at every kappa and every repeat, is in '
-                 'e6\\_timing.csv; the medians here are over the repeats and over kappa. The '
-                 'last column divides the median wall-clock time by the wall clock the planner '
-                 'spent producing that same pool. ' + GENERATION_CLOCK + ' ' + PROTOCOL
+                 'Median cost of the second phase per requested pool size $N$, selection size $k$ '
+                 'and model: mapping a whole pool into the behaviour space, and one selection. '
+                 '$n$ is the number of features of the model timed, and the rows are kept apart '
+                 'by model so that a change in $n$ is read within one model and not across a mix '
+                 'of them; mapping rows have no $k$ and no indicator. Where a pool holds fewer '
+                 'plans than $k$ the selection takes the whole pool and $k$ here is that clamped '
+                 'value, the requested one being a column of e6\\_timing.csv. Every sample, at '
+                 'every kappa and every repeat, is in e6\\_timing.csv; the medians here are over '
+                 'the repeats and, for B-Novelty, over kappa. The last two columns are the median '
+                 'over samples, and the mean of the per-domain means, of one sample\'s wall-clock '
+                 'time divided by the wall clock the planner spent producing that same pool: each '
+                 'ratio is formed sample by sample, so neither is the quotient of two medians. '
+                 + _tex(GENERATION_CLOCK) + ' ' + _tex(PROTOCOL)
                  + ' The two figures carry reference slopes positioned through the median '
                  'sample and no fitted curve. ' + rp.TIE_RULE,
-                 ['N', 'k', 'n features', 'phase', 'indicator', 'samples', 'median wall (s)',
-                  'median CPU (s)', 'pooled CPU (s)', 'macro CPU (s)',
-                  'median generation wall (s)', 'wall / generation wall'],
-                 [[row['N'], row['k'], row['features'], row['phase'], row['indicator'],
-                   row['samples'], row['wall_median'], row['cpu_median'], row['cpu_pooled_mean'],
-                   row['cpu_macro_mean'], row['generation_wall_median'],
-                   row['wall_over_generation_median']] for row in medians], digits=6),
+                 ['N', 'k', 'model', 'n features', 'phase', 'indicator', 'samples',
+                  'median wall (s)', 'median CPU (s)', 'pooled CPU (s)', 'macro CPU (s)',
+                  'median wall / generation', 'macro wall / generation'],
+                 [[row['N'], row['k'], row['model'], row['features'], row['phase'],
+                   row['indicator'], row['samples'], row['wall_median'], row['cpu_median'],
+                   row['cpu_pooled_mean'], row['cpu_macro_mean'],
+                   row['wall_over_generation_median'], row['wall_over_generation_macro']]
+                  for row in medians], digits=6),
         mapping_path, selection_path,
     ]
     mapping_rows = [r for r in rows if r['phase'] == 'mapping']
@@ -311,8 +353,8 @@ def report(cfg, results):
         'zero_cpu_samples': sum(1 for r in rows if not r['cpu_s']),
         'reference_slope_pool_size': ('drawn' if mapping_slope else
                                       'not drawn: the samples cover a single pool size'),
-        'reference_slope_b': ('drawn' if selection_slope else
-                              'not drawn: the samples cover a single value of b'),
+        'reference_slope_b': ('drawn, within the largest pool size' if selection_slope else
+                              'not drawn: the largest pool size covers a single value of b'),
         'mapping_wall_over_generation_median': _median(mapping_rows, 'wall_over_generation'),
         'mapping_wall_over_generation_macro': rp.macro(mapping_rows, 'wall_over_generation'),
         'missing_variants': [{'task_id': result['task_id'], **entry}

@@ -64,6 +64,17 @@ def read_plan_file(text):
     return actions, (int(stated.group(1)) if stated else None)
 
 
+def _children_cpu():
+    """CPU seconds this process's reaped children have used, user plus system.
+
+    A child killed after a timeout is reaped by ``subprocess``, so its time is
+    counted; one that outlives the kill is not, and the record says it timed
+    out.
+    """
+    used = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return used.ru_utime + used.ru_stime
+
+
 def _limits(cfg):
     """Applied in the child before exec: CPU seconds and address space."""
     def apply():
@@ -91,7 +102,13 @@ def generate(cfg, instance, mode, q, n, force=False):
     with tempfile.TemporaryDirectory() as work:
         command = [sys.executable, str(driver), '--plan-file', 'sas_plan',
                    instance['domain_file'], instance['problem_file'], '--search', search]
-        wall, cpu = time.perf_counter(), time.process_time()
+        # The planner is a subprocess, so its CPU is the *children's* rusage and
+        # not this process's. E6 compares the second phase's cost against the
+        # first phase's, and time.process_time here would have measured the
+        # parent waiting -- close to zero, and the comparison meaningless.
+        # Generation is serial, so no other child is reaped inside the delta.
+        wall = time.perf_counter()
+        cpu = _children_cpu()
         timed_out, code, tail = False, None, ''
         try:
             done = subprocess.run(command, cwd=work, capture_output=True, text=True,
@@ -102,7 +119,7 @@ def generate(cfg, instance, mode, q, n, force=False):
             timed_out = True
             tail = (expired.stdout or b'').decode(errors='replace')[-2000:]
             _kill(work)
-        wall, cpu = time.perf_counter() - wall, time.process_time() - cpu
+        wall, cpu = time.perf_counter() - wall, _children_cpu() - cpu
         found = [read_plan_file(Path(f).read_text())
                  for f in sorted(glob.glob(os.path.join(work, 'sas_plan.*')),
                                  key=lambda f: int(f.rsplit('.', 1)[1]))]

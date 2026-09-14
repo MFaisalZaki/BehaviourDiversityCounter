@@ -6,11 +6,16 @@ sizes. The generic model is rebuilt at every goal cap and every cost bin width
 the config lists, over one pool at a time and through one shared trace, and
 each variant is measured by the |BS| it declares, the b the pool exposes in it,
 and what the four selections then score and cost.
+
+One task carries the whole grid: at the default config eighteen dense b x b
+behaviour dumps for one pool under one selection time limit. It is walked
+cheapest cap first, so a timeout loses the expensive tail rather than the whole
+pool; capping the dumped matrix would have to come from pools and runner.
 """
 
 import statistics
 
-from bdc_experiments import models, runner
+from bdc_experiments import models, pools, runner
 from bdc_experiments import report as rp
 
 BASE = ['instance', 'domain', 'q', 'N', 'model', 'k', 'kappa', 'pool_size', 'b']
@@ -36,16 +41,23 @@ DEGENERATE = ('At q = 1 the cost bin dimension has a single bin, so the feature 
 def tasks(cfg):
     """One task per pool for the generic model alone: the resolution variants
     are looped inside the task, so a pool is replayed once and not once each."""
-    return [task_id for task_id in runner.default_tasks(cfg, 'e5')
-            if task_id.rsplit('/', 1)[1] == 'generic']
+    ids = [task_id for task_id in runner.default_tasks(cfg, 'e5')
+           if task_id.rsplit('/', 1)[1] == 'generic']
+    # An empty grid over a non-empty pool set reports as a clean zero-task
+    # sweep, which is a broken build that says nothing about why.
+    if not ids and pools.pool_files(cfg):
+        raise ValueError('E5 varies the generic model, and [models].enabled does not list it; '
+                         'add "generic" or E5 has no behaviour space to vary')
+    return ids
 
 
 def run_task(task_id, cfg):
     """Every (goal cap, cost bin width) variant of the generic model on one pool."""
     ctx = runner.context(cfg, task_id)
-    base_spec = models.registry(cfg)[ctx['extra'][0]]
-    grid = [(cap, width) for cap in cfg['e5']['goal_caps']
-            for width in cfg['e5']['cost_bin_widths']]
+    base_spec = models.generic_spec(cfg)
+    # Ascending, so a task that runs out of time has done the cheap caps first.
+    grid = sorted((cap, width) for cap in cfg['e5']['goal_caps']
+                  for width in cfg['e5']['cost_bin_widths'])
     trace, loaded, task, rows, variants = {}, None, None, [], []
 
     for goal_cap, width in grid:
@@ -69,7 +81,10 @@ def run_task(task_id, cfg):
                  'goal_orders': sizes.get('go'), 'cost_bins': sizes.get('cbin'),
                  'space_size': space, 'b_over_pool': b / len(plans),
                  'b_over_space': (b / space if space else None),
-                 'saturated': b == len(plans), 'cost_bin_degenerate': sizes.get('cbin') == 1}
+                 'saturated': b == len(plans),
+                 # Not applicable, rather than False, without a cost dimension.
+                 'cost_bin_degenerate': (sizes['cbin'] == 1
+                                         if 'cbin' in counter.dimensions else None)}
 
         selections = []
         for kappa in cfg['selection']['kappa_values']:
@@ -111,7 +126,17 @@ def _median(members, key):
     return statistics.median(values) if values else None
 
 
-def _entry(members, domain, goal_cap, width):
+def _timings(rows, keys):
+    """Median selection CPU time per group, over every selection made.
+
+    It has to come from the rows and not from the variants: b and |BS| are
+    constant over a behaviour space, the time each selection took is not.
+    """
+    return {values: rp.summarise([row['cpu_s'] for row in members])['median']
+            for values, members in rp.group(rows, keys).items()}
+
+
+def _entry(members, domain, goal_cap, width, cpu_median):
     """One summary row: how b, b/|BS| and b/n move at this resolution."""
     stats = rp.summarise([m['b'] for m in members])
     return {'domain': domain, 'goal_cap': goal_cap, 'cost_bin_width': width,
@@ -123,18 +148,20 @@ def _entry(members, domain, goal_cap, width):
             'b_over_space_pooled': rp.pooled(members, 'b_over_space'),
             'b_over_space_macro': rp.macro(members, 'b_over_space'),
             'b_over_pool_median': _median(members, 'b_over_pool'),
-            'cpu_s_median': _median(members, 'cpu_s'),
+            'cpu_s_median': cpu_median,
             'saturated_pools': sum(1 for m in members if m['saturated']),
             'degenerate_cost_bin_pools': sum(1 for m in members if m['cost_bin_degenerate'])}
 
 
-def _summary(variants):
+def _summary(variants, rows):
     """Per (domain, cap, width), then the same over every domain at once, where
     the macro mean stops agreeing with the pooled one."""
-    out = [_entry(members, *values) for values, members
-           in rp.group(variants, ('domain', 'goal_cap', 'cost_bin_width')).items()]
-    out += [_entry(members, 'all', cap, width) for (cap, width), members
-            in rp.group(variants, ('goal_cap', 'cost_bin_width')).items()]
+    keys = ('domain', 'goal_cap', 'cost_bin_width')
+    per_domain, over_all = _timings(rows, keys), _timings(rows, keys[1:])
+    out = [_entry(members, *values, per_domain.get(values))
+           for values, members in rp.group(variants, keys).items()]
+    out += [_entry(members, 'all', cap, width, over_all.get((cap, width)))
+            for (cap, width), members in rp.group(variants, keys[1:]).items()]
     return sorted(out, key=lambda row: (row['domain'], row['goal_cap'], row['cost_bin_width']))
 
 
@@ -207,7 +234,7 @@ def report(cfg, results):
     out = rp.report_dir(cfg, 'e5')
     rows = rp.all_rows(results)
     variants = _variants(rows)
-    summary = _summary(variants)
+    summary = _summary(variants, rows)
     saturation = _saturation(variants)
     degenerate = [v for v in variants if v['cost_bin_degenerate']]
 
@@ -226,8 +253,10 @@ def report(cfg, results):
                  'and the $b$ the pool then exposes. Rows are over all domains at once, so the '
                  'macro mean (the mean of the per-domain means) can differ from the pooled one; '
                  'the per-domain rows are in e5\\_summary.csv. ' + DEGENERATE + ' ' + rp.TIE_RULE,
-                 ['cap', 'width', 'pools', 'median $b$', '$b$ IQR', 'pooled $b$', 'macro $b$',
-                  'median $|BS|$', 'median $b/|BS|$', 'median $b/n$', 'saturated'],
+                 # Plain words: report.table escapes the header cells, so maths
+                 # here would print as literal dollar signs; the caption is raw.
+                 ['cap', 'width', 'pools', 'median b', 'b IQR', 'pooled b', 'macro b',
+                  'median |BS|', 'median b/|BS|', 'median b/n', 'saturated'],
                  [[row['goal_cap'], row['cost_bin_width'], row['pools'], row['b_median'],
                    (None if row['b_q1'] is None else f"{row['b_q1']:g}--{row['b_q3']:g}"),
                    row['b_pooled_mean'], row['b_macro_mean'], row['space_size_median'],
