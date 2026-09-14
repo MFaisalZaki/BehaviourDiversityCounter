@@ -172,16 +172,21 @@ def _worst(rows):
 def _checks(rows):
     """The blocking half of C3: every B-Coverage ratio is exactly 1."""
     cases = [row for row in rows if row['indicator'] == 'bcoverage']
+    checked = [row for row in cases if row['optimum_exists']]
     named = lambda row: (f"{row['instance']} {row['pool_stem']} {row['model']} "
                          f"k={row['k']} kappa={row['kappa']}")
+    violations = [{'case': named(row), 'greedy': row['greedy'], 'optimal': row['optimal'],
+                   'ratio': row['ratio']} for row in checked if row['ratio'] != 1.0]
     return {
         'check': 'the greedy B-Coverage value equals the enumerated B-Coverage optimum '
                  'over the subsets of exactly k behaviours, on every case',
-        'passed': all(row['ratio'] == 1.0 for row in cases if row['optimum_exists']),
+        # A sweep that enumerated no optimum has not confirmed the claim, so it
+        # does not pass: an empty conjunction would read as green with nothing
+        # behind it.
+        'passed': bool(checked) and not violations,
         'cases': len(cases),
-        'violations': [{'case': named(row), 'greedy': row['greedy'], 'optimal': row['optimal'],
-                        'ratio': row['ratio']}
-                       for row in cases if row['optimum_exists'] and row['ratio'] != 1.0],
+        'checked': len(checked),
+        'violations': violations,
         'not_enumerated': [{'case': named(row), 'reason': 'k exceeds b, so no subset of exactly '
                             'k behaviours exists and there is no ratio to check'}
                            for row in cases if not row['optimum_exists']],
@@ -192,9 +197,11 @@ def _checks(rows):
 def _at_most(rows):
     """B-MaxMin only: how often the at-most-k optimum beats the exactly-k one,
     and where the greedy set of k stands against it."""
+    # The comparison needs both optima, so the denominator is the cases where
+    # at_most_exceeds was decided, not every case with an at-most-k optimum.
     group = [row for row in rows
-             if row['indicator'] == 'bmaxmin' and row.get('optimal_at_most') is not None]
-    exceeds = [row for row in group if row.get('at_most_exceeds')]
+             if row['indicator'] == 'bmaxmin' and row.get('at_most_exceeds') is not None]
+    exceeds = [row for row in group if row['at_most_exceeds']]
     return {'cases': len(group), 'exceeds_exactly_k': len(exceeds),
             'exceeds_fraction': len(exceeds) / len(group) if group else None,
             'greedy_over_at_most': rp.summarise([row.get('ratio_at_most') for row in group]),
@@ -238,9 +245,12 @@ def report(cfg, results):
     out = rp.report_dir(cfg, 'e3')
     rows = rp.all_rows(results)
     summary, checks = _summary(rows), _checks(rows)
-    if not checks['passed']:
-        print(f"E3 CHECK FAILED: {len(checks['violations'])} of {checks['cases']} B-Coverage "
+    if checks['violations']:
+        print(f"E3 CHECK FAILED: {len(checks['violations'])} of {checks['checked']} B-Coverage "
               'cases do not reach the enumerated optimum; see e3_checks.json')
+    elif not checks['passed']:
+        print('E3 CHECK NOT RUN: no B-Coverage optimum was enumerated, so the exact half of '
+              'C3 is untested here; see e3_checks.json')
 
     written = [
         rp.write_csv(out / 'e3_ratios.csv', rows, COLUMNS),
@@ -254,12 +264,14 @@ def report(cfg, results):
                  'enumerate. B-Coverage is exact by Thm.~bcov-greedy and is shown as the check it '
                  'is; the other three rules are heuristics for which the paper states no '
                  'approximation bound, so the values here are measurements on this benchmark '
-                 'and not a bound. "at opt." is the fraction of cases reaching the optimum. '
-                 + rp.TIE_RULE,
-                 ['indicator', 'k', 'kappa', 'cases', 'min', 'p5', 'median', 'at opt.',
-                  'macro mean'],
-                 [[row['indicator'], row['k'], row['kappa'], row['cases'], row['min'], row['p5'],
-                   row['median'], row['at_optimum'], row['macro_mean']] for row in summary]),
+                 'and not a bound. "cases" is the group size and "rated" the cases with an '
+                 'optimum to divide by; every column to the right of it, "at opt." included, is '
+                 'over the rated cases. ' + rp.TIE_RULE,
+                 ['indicator', 'k', 'kappa', 'cases', 'rated', 'min', 'p5', 'median', 'at opt.',
+                  'pooled mean', 'macro mean'],
+                 [[row['indicator'], row['k'], row['kappa'], row['cases'], row['rated'],
+                   row['min'], row['p5'], row['median'], row['at_optimum'], row['pooled_mean'],
+                   row['macro_mean']] for row in summary]),
         _figure(rows, out / 'figures' / 'e3_ratios.pdf'),
     ]
 
@@ -267,10 +279,12 @@ def report(cfg, results):
     path.write_text(json.dumps(checks, indent=1))
     written.append(path)
     written.append(rp.manifest(cfg, 'e3', written, results, extra={
-        'bcoverage_check': (('PASS' if checks['passed'] else 'FAIL') if checks['cases']
-                            else 'no B-Coverage case was enumerated'),
+        'bcoverage_check': ('PASS' if checks['passed'] else
+                            'FAIL' if checks['violations'] else 'no B-Coverage optimum was '
+                            'enumerated, so the exact half of C3 is untested here'),
         'bcoverage_violations': checks['violations'],
         'bcoverage_cases': checks['cases'],
+        'bcoverage_checked': checks['checked'],
         'behaviour_range': cfg['e3']['behaviour_range'],
         'k_values': cfg['e3']['k_values'],
         'bmaxmin_at_most': _at_most(rows),

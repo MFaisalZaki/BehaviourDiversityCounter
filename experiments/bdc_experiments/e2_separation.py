@@ -66,6 +66,16 @@ def _subset_rows(base, k, kappas, scores, enumerated):
     return rows
 
 
+def _selection(counter, loaded, dump, k, indicator, kappa):
+    """``(entry, selected)``: one selection, dumped whole. The caller fills in
+    the four indicator values it scores at this kappa."""
+    selected, wall, cpu = runner.select(counter, loaded['plans'], k, indicator, kappa)
+    return ({'k': k, 'kappa': kappa, 'indicator': indicator, 'values': None,
+             'kappa_free': indicator != 'bnovelty',
+             'selection': runner.selection_record(loaded, dump, selected, wall, cpu)},
+            selected)
+
+
 def run_task(task_id, cfg):
     """Part A (random equal-count subsets) and part B (the four selections)."""
     ctx = runner.context(cfg, task_id)
@@ -100,31 +110,66 @@ def run_task(task_id, cfg):
             subsets.append({'k': k, 'b': b, 'enumerated': enumerated, 'sets': sets,
                             'scores': scores})
             rows.extend(_subset_rows(base, k, kappas, scores, enumerated))
+        fixed = {}                             # only B-Novelty's greedy step reads kappa, so
+        for indicator in runner.INDICATORS:    # the other three are selected once per k
+            if indicator != 'bnovelty':
+                fixed[indicator] = (*_selection(counter, loaded, dump, k, indicator, kappas[0]),
+                                    len(selections))
+                selections.append(fixed[indicator][0])
         for kappa in kappas:
             for indicator in runner.INDICATORS:
-                selected, wall, cpu = runner.select(counter, plans, k, indicator, kappa)
+                if indicator in fixed:
+                    entry, selected, at = fixed[indicator]
+                else:
+                    entry, selected = _selection(counter, loaded, dump, k, indicator, kappa)
+                    at = len(selections)
+                    selections.append(entry)
                 values = runner.indicators(counter, selected, kappa)
-                selection = runner.selection_record(loaded, dump, selected, wall, cpu)
-                selections.append({'k': k, 'kappa': kappa, 'indicator': indicator,
-                                   'values': values, 'selection': selection})
+                if entry['kappa'] == kappa:
+                    entry['values'] = values
+                else:                          # the same set, scored at a further kappa
+                    selections.append({'k': k, 'kappa': kappa, 'indicator': indicator,
+                                       'kappa_free': True, 'values': values,
+                                       'same_selection_as': at})
                 rows.append({**base, 'k': k, 'kappa': kappa, 'part': 'selection',
                              'selector': indicator, 'selected': len(selected),
-                             'selected_distinct': len(set(selection['distinct'])),
-                             'wall_s': wall, 'cpu_s': cpu,
+                             'selected_distinct': len(set(entry['selection']['distinct'])),
+                             'wall_s': entry['selection']['wall_s'],
+                             'cpu_s': entry['selection']['cpu_s'],
                              **{f'score_{name}': value for name, value in values.items()}})
 
     return {'pool': record, 'model': model_record, 'rows': rows,
             'extra': {'subsets': subsets, 'selections': selections,
-                      'seeding': 'random.Random(repr((run seed, task id, k)))'}}
+                      'seeding': 'random.Random(repr((run seed, task id, k)))',
+                      'kappa_free': 'B-Coverage, B-MaxSum and B-MaxMin do not read kappa: each is '
+                                    'selected once per k and scored at every kappa, so its later '
+                                    'kappas are dumped as scores naming the selection they reuse '
+                                    'by its index in this list'}}
 
 
 # ----------------------------------------------------------------------
 # Report
 # ----------------------------------------------------------------------
 
+def _constancy(rows):
+    """Per (k, kappa, indicator): the pool cells sampled, the fraction of them
+    on which the indicator took a single value over the whole sample, and the
+    mean modal fraction. The B-Coverage line is the construction check."""
+    out = []
+    for keys, cells in rp.group(rows, ['k', 'kappa', 'indicator']).items():
+        out.append({'part': 'aggregate', **dict(zip(('k', 'kappa', 'indicator'), keys)),
+                    'cells': len(cells),
+                    'constant_fraction': sum(r['constant'] for r in cells) / len(cells),
+                    'mean_modal_fraction': statistics.fmean(r['modal_fraction'] for r in cells)})
+    return out
+
+
 def _taus(results):
     """Kendall tau-b between each pair of dissimilarity indicators over the
-    subsets drawn on one pool: a row per (pool, model, k, kappa, pair)."""
+    subsets drawn on one pool: a row per (pool, model, k, kappa, pair).
+
+    ``enumerated`` marks the pools where the sample is every k-subset there is;
+    the tau is then the population value and no sampling p-value applies."""
     rows = []
     for result in results:
         pool = result['pool']
@@ -139,14 +184,27 @@ def _taus(results):
                     tau, p = rp.kendall(values[first], values[second])
                     rows.append({**head, 'k': block['k'], 'kappa': kappa, 'b': block['b'],
                                  'pair': pair, 'n_subsets': len(block['sets']),
-                                 'tau': tau, 'p': p})
+                                 'enumerated': block['enumerated'], 'tau': tau,
+                                 'p': None if block['enumerated'] else p})
     return rows
 
 
+def _macro_spread(rows, key='tau'):
+    """The mean over domains of each domain's median and quartiles: report.macro
+    averages the per-domain means, and the spread is averaged the same way."""
+    per_domain = {}
+    for row in rows:
+        if row[key] is not None:
+            per_domain.setdefault(row['domain'], []).append(row[key])
+    spreads = [rp.summarise(values) for values in per_domain.values()]
+    return {f'macro_{name}': statistics.fmean([s[name] for s in spreads]) if spreads else None
+            for name in ('median', 'q1', 'q3')}
+
+
 def _tau_summary(rows):
-    """Median, IQR, macro mean and the fraction of pools with a negative tau,
-    per (pair, k, kappa). A tau is missing where an indicator was constant
-    over the sample and the correlation is undefined."""
+    """Median and IQR pooled and macro, and the fraction of pools with a
+    negative tau, per (pair, k, kappa). A tau is missing where an indicator was
+    constant over the sample and the correlation is undefined."""
     out = []
     for pair in PAIRS:
         for k, kappa in sorted({(row['k'], row['kappa']) for row in rows}):
@@ -155,8 +213,7 @@ def _tau_summary(rows):
             spread = rp.summarise([r['tau'] for r in group])
             out.append({'pair': pair, 'k': k, 'kappa': kappa, 'n': spread['n'],
                         'undefined': len(group) - len(known), 'median': spread['median'],
-                        'q1': spread['q1'], 'q3': spread['q3'],
-                        'macro_mean': rp.macro(known, 'tau'),
+                        'q1': spread['q1'], 'q3': spread['q3'], **_macro_spread(known),
                         'negative_fraction': (sum(r['tau'] < 0 for r in known) / len(known)
                                               if known else None)})
     return out
@@ -184,18 +241,28 @@ def _cross(results):
     return rows
 
 
+def _cells(rows):
+    """The distinct pool cells some rows come from."""
+    return {tuple(row[key] for key in CELL) for row in rows}
+
+
 def _matrix(rows, statistic):
-    """selector x scorer means of the ratio, per (k, kappa) and over all of them."""
+    """selector x scorer means of the ratio, per (k, kappa) and over all of them.
+
+    Each scorer carries its own cell count, because a pool on which all four
+    selections score zero contributes no ratio to that scorer; ``b_le_k_cells``
+    counts the cells where every selection returns every behaviour."""
     out = []
     for k, kappa in sorted({(row['k'], row['kappa']) for row in rows}) + [('all', 'all')]:
         block = rows if k == 'all' else [r for r in rows if (r['k'], r['kappa']) == (k, kappa)]
         for selector in runner.INDICATORS:
             mine = [row for row in block if row['selector'] == selector]
             entry = {'k': k, 'kappa': kappa, 'selector': selector,
-                     'cells': len({tuple(row[key] for key in CELL) for row in mine})}
+                     'b_le_k_cells': len(_cells([r for r in mine if not r['discriminating']]))}
             for scorer in runner.INDICATORS:
-                entry[f'scored_{scorer}'] = statistic([r for r in mine if r['scorer'] == scorer],
-                                                      'ratio')
+                scored = [r for r in mine if r['scorer'] == scorer]
+                entry[f'scored_{scorer}'] = statistic(scored, 'ratio')
+                entry[f'n_{scorer}'] = len(_cells([r for r in scored if r['ratio'] is not None]))
             out.append(entry)
     return out
 
@@ -236,32 +303,39 @@ def report(cfg, results):
     usable = [r for r in results if not r.get('error') and not r.get('extra', {}).get('skipped')]
     subsets = [row for r in usable for row in r['rows'] if row['part'] == 'subsets']
     taus, cross = _taus(usable), _cross(usable)
-    summary = _tau_summary(taus)
+    summary, constancy = _tau_summary(taus), _constancy(subsets)
     main = [row for row in cross if row['discriminating']]
-    columns = ['k', 'kappa', 'selector', 'cells'] + [f'scored_{n}' for n in runner.INDICATORS]
+    columns = (['k', 'kappa', 'selector'] + [f'scored_{n}' for n in runner.INDICATORS]
+               + [f'n_{n}' for n in runner.INDICATORS])
 
     written = [
-        rp.write_csv(out / 'e2_random_subsets.csv', subsets,
+        # The aggregate block answers the headline question of part A: on what
+        # share of the pool cells does each indicator vary over the sample?
+        rp.write_csv(out / 'e2_random_subsets.csv', subsets + constancy,
                      BASE + ['part', 'indicator', 'n_subsets', 'enumerated', 'n_values',
-                             'constant', 'modal_fraction', 'min', 'max', 'mean']),
-        rp.write_csv(out / 'e2_kendall.csv', taus, BASE + ['pair', 'n_subsets', 'tau', 'p']),
+                             'constant', 'modal_fraction', 'min', 'max', 'mean',
+                             'cells', 'constant_fraction', 'mean_modal_fraction']),
+        rp.write_csv(out / 'e2_kendall.csv', taus,
+                     BASE + ['pair', 'n_subsets', 'enumerated', 'tau', 'p']),
         rp.write_csv(out / 'e2_cross.csv', _matrix(main, rp.pooled), columns),
         rp.write_csv(out / 'e2_cross_macro.csv', _matrix(main, rp.macro), columns),
         rp.write_csv(out / 'e2_cross_all_pools.csv',
                      [{**row, 'aggregate': name} for name, statistic in
                       (('pooled', rp.pooled), ('macro', rp.macro))
-                      for row in _matrix(cross, statistic)], columns + ['aggregate']),
+                      for row in _matrix(cross, statistic)],
+                     columns + ['b_le_k_cells', 'aggregate']),
         rp.table(out / 'tables' / 'e2_kendall.tex', 'tab:e2-kendall',
                  'Kendall $\\tau_b$ between the rankings the dissimilarity-based indicators give '
                  'the random equal-count subsets of one pool: median and interquartile range over '
-                 'pools, the mean of the per-domain means, and the fraction of pools with a '
-                 'negative $\\tau_b$. "undef." counts the pools where one indicator is constant '
-                 'over the sample and $\\tau_b$ is undefined. The B-MaxSum/B-MaxMin pair does not '
-                 'depend on $\\kappa$.',
-                 ['pair', 'k', 'kappa', 'n', 'undef.', 'median', 'q1', 'q3', 'macro mean',
-                  'negative'],
+                 'pools, pooled and as the mean over domains of the per-domain figures, and the '
+                 'fraction of pools with a negative $\\tau_b$. "undef." counts the pools where one '
+                 'indicator is constant over the sample and $\\tau_b$ is undefined. The '
+                 'B-MaxSum/B-MaxMin pair does not depend on $\\kappa$.',
+                 ['pair', 'k', 'kappa', 'n', 'undef.', 'median', 'q1', 'q3', 'macro median',
+                  'macro q1', 'macro q3', 'negative'],
                  [[row['pair'], row['k'], row['kappa'], row['n'], row['undefined'], row['median'],
-                   row['q1'], row['q3'], row['macro_mean'], row['negative_fraction']]
+                   row['q1'], row['q3'], row['macro_median'], row['macro_q1'], row['macro_q3'],
+                   row['negative_fraction']]
                   for row in summary]),
         rp.table(out / 'tables' / 'e2_cross.tex', 'tab:e2-cross',
                  'Each selection rule scored under each indicator, as a fraction of the best of '
@@ -282,10 +356,15 @@ def report(cfg, results):
     written.append(rp.manifest(cfg, 'e2', written, results, extra={
         'bcoverage_constant_check': 'FAIL' if failing else 'PASS' if checked else 'no subsets drawn',
         'cells_checked': len(checked), 'cells_failing': len(failing),
+        # The same check as the aggregate block of e2_random_subsets.csv reports.
+        'bcoverage_constant_fraction': {f"k={row['k']} kappa={row['kappa']}":
+                                        row['constant_fraction'] for row in constancy
+                                        if row['indicator'] == 'bcoverage'},
         'failures': [f"{row['instance']} {row['model']} k={row['k']} kappa={row['kappa']}"
                      for row in failing],
         'subsets_requested': cfg['e2']['subsets'],
         'note': 'on pools with b <= k every selection returns every behaviour, so the main cross '
-                'table is restricted to b > k and e2_cross_all_pools.csv is the appendix version',
+                'table is restricted to b > k; e2_cross_all_pools.csv is the appendix version and '
+                'its b_le_k_cells column counts the cells the restriction drops',
     }))
     return written
