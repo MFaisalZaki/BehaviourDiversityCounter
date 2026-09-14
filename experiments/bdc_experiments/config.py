@@ -6,8 +6,12 @@ No dataclasses and no schema library: the file is small and the keys are fixed.
 """
 
 import hashlib
-import tomllib
 from pathlib import Path
+
+try:                        # tomllib is 3.11; the supported range starts at 3.10
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 #: The configuration, section by section: key -> (type, required).
 #: Anything not listed here is rejected, so a typo is an error rather than a

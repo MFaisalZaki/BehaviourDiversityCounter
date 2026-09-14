@@ -1,0 +1,29 @@
+# The library and the evaluation, on the two ends of the supported range.
+# Neither SymK nor the classical-domains checkout is needed: the smoke sweep
+# runs against the pools committed under
+# experiments/bdc_experiments/configs/smoke_pools/.
+name: tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install poetry
+        run: pipx install poetry
+      - name: Install
+        run: poetry install --extras analysis
+      - name: Test
+        run: poetry run pytest -q --durations=10

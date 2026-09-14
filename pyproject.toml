@@ -27,6 +27,9 @@ lark = "^1.1.9"
 # (triu_indices, ix_, isin, setdiff1d, argmax), so 1.x serves as well as 2.x,
 # and a caret on either would refuse the other.
 numpy = ">=1.24"
+# `bdc_experiments.config` reads one TOML file. tomllib is standard from 3.11;
+# below that its backport stands in, and nothing else changes.
+tomli = { version = "^2.0", python = "<3.11" }
 
 # Optional extras. The harness's own analysis is stdlib-only -- the Wilcoxon
 # test, Holm's correction and Kendall's tau are written out in
