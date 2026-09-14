@@ -30,11 +30,11 @@ def cases(cfg):
         pool = pools.read_pool(path)
         task = pools.task_of(pool)
         info = runner.instance_info(cfg, pool)
-        trace, loaded = {}, None
+        loaded = None
         for spec in models.selection_specs(cfg, pool['domain']):
-            counter = models.build_counter(spec, task, info, trace_cache=trace)
+            counter = models.build_counter(spec, task, info)
             if loaded is None:
-                loaded = pools.load_pool(path, counter=counter, task=task)
+                loaded = pools.load_pool(path, counter, task)
             counter.b_coverage(loaded['plans'])
             yield pool['instance'], spec.name, counter, loaded['plans']
 

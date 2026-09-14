@@ -143,7 +143,7 @@ def write_resource_file(path, declarations):
     return path
 
 
-def build_counter(spec, task, instance_info, trace_cache=None):
+def build_counter(spec, task, instance_info):
     """The library counter for a spec over one instance.
 
     ``instance_info`` carries what the spec deliberately leaves out: the
@@ -168,7 +168,7 @@ def build_counter(spec, task, instance_info, trace_cache=None):
             addinfo['optimal-cost'] = instance_info['optimal_cost']
             addinfo['q'] = instance_info['q']
         dimensions.append((feature.key, addinfo))
-    return BehaviourDiversityCounter(task, dimensions, trace_cache=trace_cache)
+    return BehaviourDiversityCounter(task, dimensions)
 
 
 #: What each dimension is, how the paper counts |Delta_i|, and its dissimilarity.

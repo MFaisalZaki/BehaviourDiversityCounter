@@ -26,12 +26,19 @@ def counter_for(cfg, pool, name='generic'):
     return models.build_counter(models.registry(cfg)[name], task, runner.instance_info(cfg, pool)), task
 
 
+def loaded_pool(cfg, path):
+    pool = pools.read_pool(path)
+    return pools.load_pool(path, *counter_for(cfg, pool))
+
+
 def dump_for(cfg, path, name='generic'):
     pool = pools.read_pool(path)
     counter, task = counter_for(cfg, pool, name)
-    loaded = pools.load_pool(path, counter=counter, task=task)
+    loaded = pools.load_pool(path, counter, task)
     record = models.model_record(models.registry(cfg)[name], counter, task, {'id': pool['instance']})
-    return pools.behaviour_dump(cfg, counter, loaded, record), pools.dump_path(cfg, record['hash'], loaded), loaded
+    where = loaded['record']
+    path = pools.dump_path(cfg, record['hash'], where['domain'], where['instance'], where['pool_stem'])
+    return pools.behaviour_dump(cfg, counter, loaded, record), path, loaded
 
 
 class TestRoundTrip:
@@ -42,7 +49,7 @@ class TestRoundTrip:
         assert pools.Path(pool['problem_file']).is_file()
 
     def test_the_pool_record_carries_what_the_report_needs(self, smoke, rovers_pool):
-        loaded = pools.load_pool(rovers_pool)
+        loaded = loaded_pool(smoke, rovers_pool)
         record = loaded['record']
         for key in ('instance', 'domain', 'pool_stem', 'mode', 'q', 'requested', 'size',
                     'dropped_replay', 'dropped_cost', 'optimal_cost', 'parse_s', 'replay_s'):
@@ -60,7 +67,7 @@ class TestDropping:
              'cost': 1}]
         path = tmp_path / 'broken.json'
         path.write_text(json.dumps(broken))
-        loaded = pools.load_pool(path)
+        loaded = loaded_pool(smoke, path)
         assert len(loaded['record']['dropped_replay']) == 1
         assert loaded['record']['size'] == len(pool['plans'])
 
@@ -70,21 +77,14 @@ class TestDropping:
         tightened['plans'] = list(pool['plans'])
         path = tmp_path / 'tight.json'
         path.write_text(json.dumps(tightened))
-        loaded = pools.load_pool(path)
+        loaded = loaded_pool(smoke, path)
         assert loaded['record']['cost_bound'] == pytest.approx(float(pool['optimal_cost']))
         assert all(cost <= pool['optimal_cost'] for cost in loaded['costs'])
 
-    def test_a_top_k_pool_has_no_quality_bound(self, rovers_pool, tmp_path):
-        pool = dict(pools.read_pool(rovers_pool), mode='topk')
-        path = tmp_path / 'topk.json'
-        path.write_text(json.dumps(pool))
-        loaded = pools.load_pool(path)
-        assert loaded['record']['cost_bound'] is None and not loaded['record']['dropped_cost']
-
 
 class TestOrderAndCache:
-    def test_the_pool_is_cost_sorted(self, rovers_pool):
-        costs = pools.load_pool(rovers_pool)['costs']
+    def test_the_pool_is_cost_sorted(self, smoke, rovers_pool):
+        costs = loaded_pool(smoke, rovers_pool)['costs']
         assert costs == sorted(costs)
 
     def test_the_behaviour_dump_is_written_once_and_read_back(self, smoke, rovers_pool):

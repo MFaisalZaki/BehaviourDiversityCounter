@@ -21,8 +21,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from bdc_experiments import SCHEMA_VERSION, benchmark
-from bdc_experiments.config import results_root
+from bdc_experiments import SCHEMA_VERSION, benchmark, pools
 
 MEMBER = re.compile(r'^(?P<q>[\d.]+)-(?P<k>\d+)-classical-(?P<ipc>[A-Za-z0-9]+)-'
                     r'(?P<name>.+)-(?P<inst>\d+)-fi-bc-results\.json$')
@@ -103,11 +102,6 @@ def pool_stem(q, n):
     return f'topq-q{q}-N{n}'
 
 
-def pool_path(cfg, instance, q, n):
-    return (results_root(cfg) / 'pools' / instance['domain'] / instance['stem']
-            / f'{pool_stem(q, n)}.json')
-
-
 def read_plan(text):
     """``(actions, cost)`` out of one plan string; cost None when unstated."""
     actions = [line.strip() for line in text.splitlines() if line.strip().startswith('(')]
@@ -178,7 +172,7 @@ def run(cfg, force=False, only=None, domain=None, log=print):
                 continue                    # the archive holds no pool of this instance
             resources, entry = resources_of(instance, declared.get((instance['name'], instance['ipc']), {}))
             for position, ((q, n), member) in enumerate(sorted(files.items())):
-                out = pool_path(cfg, instance, q, n)
+                out = pools.pool_path(cfg, instance['domain'], instance['stem'], pool_stem(q, n))
                 if out.is_file() and not force:
                     record = json.loads(out.read_text())
                 else:

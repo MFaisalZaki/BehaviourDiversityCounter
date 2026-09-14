@@ -5,11 +5,14 @@ was checked against an independently written reference implementation of the
 paper's definitions. This note lists every check, its outcome, the one library
 fix the audit produced, and the tie-breaking rule the evaluation reports.
 
-The reference is `experiments/bdc_experiments/reference.py`: the four
-indicators, the four extraction rules and the stability distance of the
-literature's model, standard library only, no rounding, written from the definitions of the paper alone by
-an author who had not read the library's implementation of the same functions.
-The audit itself is `tests/experiments/test_audit.py`, over random behaviour
+The reference is in two places, both standard library only, no rounding,
+written from the definitions of the paper alone by an author who had not read
+the library's implementation of the same functions:
+`experiments/bdc_experiments/reference.py` holds the four indicators and the
+stability distance of the literature's model, which the reports also use to
+read values off a behaviour dump; the four extraction rules (`ref_extract`)
+live at the top of `tests/experiments/test_audit.py`, since the audit is
+their only reader. The audit itself is that file, over random behaviour
 spaces built in `tests/experiments/conftest.py`: 2 to 4 dimensions of 2 to 6
 values each, one family of per-dimension dissimilarity that is a metric and one
 that is definite but not a metric, uniform weights in about half the spaces and

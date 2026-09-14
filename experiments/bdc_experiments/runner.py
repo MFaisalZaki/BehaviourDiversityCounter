@@ -80,7 +80,7 @@ def context(cfg, task_id):
     kind, domain, ipc, stem, pool_stem, model = task_id.split('/')
     return {'kind': kind, 'task_id': task_id, 'instance': f'{domain}/{ipc}/{stem}',
             'domain': domain, 'pool_stem': pool_stem, 'model': model,
-            'pool_path': results_root(cfg) / 'pools' / domain / stem / f'{pool_stem}.json'}
+            'pool_path': pools.pool_path(cfg, domain, stem, pool_stem)}
 
 
 def instance_info(cfg, pool):
@@ -89,7 +89,7 @@ def instance_info(cfg, pool):
             'resources': pool.get('resources'), 'resource_dir': results_root(cfg) / 'resources'}
 
 
-def setup(cfg, ctx, spec, trace_cache=None):
+def setup(cfg, ctx, spec):
     """Task, counter, cost-sorted pool, model record and behaviour dump."""
     pool = pools.read_pool(ctx['pool_path'])
     if not pool['plans']:
@@ -101,8 +101,8 @@ def setup(cfg, ctx, spec, trace_cache=None):
                        'so the agents feature of this model cannot be built')
     task = pools.task_of(pool)
     info = instance_info(cfg, pool)
-    counter = models.build_counter(spec, task, info, trace_cache=trace_cache)
-    loaded = pools.load_pool(ctx['pool_path'], counter=counter, task=task)
+    counter = models.build_counter(spec, task, info)
+    loaded = pools.load_pool(ctx['pool_path'], counter, task)
     if not loaded['plans']:
         raise SkipTask('no plan of the pool could be replayed against the task')
     record = models.model_record(spec, counter, task, info)
@@ -236,6 +236,5 @@ def load_results(cfg, kind):
 def load_dump(cfg, result):
     """The behaviour dump a result's numbers are indexed into."""
     pool = result['pool']
-    path = (results_root(cfg) / 'behaviours' / result['model']['hash'] / pool['domain']
-            / pool['instance'].split('/')[-1] / f"{pool['pool_stem']}.json")
+    path = pools.dump_path(cfg, result['model']['hash'], pool['domain'], pool['instance'], pool['pool_stem'])
     return json.loads(path.read_text()) if path.is_file() else None

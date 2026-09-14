@@ -25,8 +25,8 @@ from behaviour_diversity_counter import BehaviourDiversityCounter
 from bdc_experiments import models, pools, runner
 from bdc_experiments.config import load
 from bdc_experiments.reference import (
-    ref_bcoverage, ref_bmaxmin, ref_bmaxsum, ref_bnovelty, ref_distinct, ref_extract,
-    ref_indicator, ref_stability)
+    ref_bcoverage, ref_bmaxmin, ref_bmaxsum, ref_bnovelty, ref_distinct, ref_indicator,
+    ref_stability)
 
 TOL = 1e-9
 KAPPAS = (1, 2, 3, 5)
@@ -35,6 +35,126 @@ INDICATORS = ('bcoverage', 'bmaxsum', 'bmaxmin', 'bnovelty')
 #: concerned; the reference compares raw floats.
 TIE_TOLERANCE = 0.5 * 10 ** -TIE_DECIMALS
 
+
+# ----------------------------------------------------------------------
+# The phase-two rules extract_lambda(M, C, k), written straight from the
+# definitions and sharing no code with the library. A plan triple is
+# ``(index, cost, behaviour)``; pools arrive cost-sorted, so the paper's
+# "arbitrary" tie-break is the earliest position given, with scores within
+# TOL of each other counted as tied.
+# ----------------------------------------------------------------------
+
+def _better(value, best):
+    """Whether ``value`` beats ``best`` by more than the tie tolerance."""
+    return best is None or value > best + TOL
+
+
+def _pad(plans, held, target):
+    """Fill a selection up to target with further plans, in pool order."""
+    for pos in range(len(plans)):
+        if len(held) >= target:
+            break
+        if pos not in held:
+            held.append(pos)
+    return held
+
+
+def _open(plans, d, k):
+    """The shared opening: the first pair, i < j, maximising psi_M."""
+    n = len(plans)
+    if k <= 0 or n == 0:
+        return []
+    if k == 1 or n == 1:
+        return list(range(min(k, n)))
+    best_value, best_pair = None, None
+    for i, j in combinations(range(n), 2):
+        value = d(plans[i][2], plans[j][2])
+        if _better(value, best_value):
+            best_value, best_pair = value, [i, j]
+    return best_pair
+
+
+def _greedy(plans, d, k, score):
+    """Open on the best pair, then repeatedly add the lowest-position candidate
+    of maximal score (score None skips it), and pad to min(k, |C|)."""
+    held = _open(plans, d, k)
+    target = min(k, len(plans))
+    while len(held) < target:
+        best_value, best_pos = None, None
+        for pos in range(len(plans)):
+            if pos in held:
+                continue
+            value = score(pos, held)
+            if value is None:
+                continue
+            if _better(value, best_value):
+                best_value, best_pos = value, pos
+        if best_pos is None:
+            break
+        held.append(best_pos)
+    return [plans[pos][0] for pos in _pad(plans, held, target)]
+
+
+def ref_extract_bcoverage(plans, d, k, kappa=None):
+    """extract_BCoverage (exact): the cheapest plan of each behaviour, in
+    first-occurrence order, up to k, then padding."""
+    if k <= 0:
+        return []
+    seen, cheapest = [], []
+    for pos, (_index, cost, behaviour) in enumerate(plans):
+        if behaviour in seen:
+            j = seen.index(behaviour)
+            if cost < plans[cheapest[j]][1]:
+                cheapest[j] = pos
+        else:
+            seen.append(behaviour)
+            cheapest.append(pos)
+    held = _pad(plans, cheapest[:k], min(k, len(plans)))
+    return [plans[pos][0] for pos in held]
+
+
+def ref_extract_bmaxsum(plans, d, k, kappa=None):
+    """extract_BMaxSum: greedy on the B-MaxSum gain -- the sum of psi_M to the
+    held plans for a new behaviour, 0 for a duplicate."""
+    def gain(pos, held):
+        behaviour = plans[pos][2]
+        if any(behaviour == plans[h][2] for h in held):
+            return 0.0
+        return math.fsum(d(behaviour, plans[h][2]) for h in held)
+    return _greedy(plans, d, k, gain)
+
+
+def ref_extract_bmaxmin(plans, d, k, kappa=None):
+    """extract_BMaxMin: farthest-first on the minimum psi_M to the held."""
+    def gain(pos, held):
+        return min(d(plans[pos][2], plans[h][2]) for h in held)
+    return _greedy(plans, d, k, gain)
+
+
+def ref_extract_bnovelty(plans, d, k, kappa):
+    """extract_BNovelty: greedy on B-Novelty of the combined set over the
+    new-behaviour candidates, then padding."""
+    if kappa is None or kappa < 1:
+        raise ValueError("extract 'bnovelty' needs kappa >= 1, got %r" % (kappa,))
+
+    def gain(pos, held):
+        behaviour = plans[pos][2]
+        if any(behaviour == plans[h][2] for h in held):
+            return None
+        combined = [plans[h][2] for h in held] + [behaviour]
+        return ref_bnovelty(combined, d, kappa)
+    return _greedy(plans, d, k, gain)
+
+
+def ref_extract(name, plans, d, k, kappa=None):
+    """Dispatch to the named extraction rule."""
+    rules = {'bcoverage': ref_extract_bcoverage,
+             'bmaxsum': ref_extract_bmaxsum,
+             'bmaxmin': ref_extract_bmaxmin,
+             'bnovelty': ref_extract_bnovelty}
+    if name not in rules:
+        raise ValueError('unknown extraction rule: %r' % (name,))
+    return rules[name](plans, d, k, kappa)
 
 def pool_for(space, seed, low=0, high=12):
     """A cost-sorted pool over the space, and a counter holding it.

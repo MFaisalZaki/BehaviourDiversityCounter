@@ -11,11 +11,6 @@ B-MaxMin do not read kappa, so each is selected once; B-Novelty once per kappa.
 from bdc_experiments import models, runner
 
 
-def k_max(cfg):
-    """The largest k any report reads."""
-    return max(cfg['selection']['k_values'])
-
-
 def tasks(cfg):
     return runner.pool_tasks(cfg, 'select', lambda pool: models.selection_specs(cfg, pool['domain']))
 
@@ -24,7 +19,7 @@ def run_task(task_id, cfg):
     ctx = runner.context(cfg, task_id)
     task, counter, loaded, record, dump = runner.setup(cfg, ctx, models.registry(cfg)[ctx['model']])
     plans, kappas = loaded['plans'], cfg['selection']['kappa_values']
-    k = min(k_max(cfg), len(plans))
+    k = min(max(cfg['selection']['k_values']), len(plans))      # the largest k any report reads
     rows, selections = [], []
     for indicator in runner.INDICATORS:
         for kappa in (kappas if indicator == 'bnovelty' else kappas[:1]):

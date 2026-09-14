@@ -8,6 +8,7 @@ recorded run, and its indicators are read off the behaviour dump's matrix.
 
 import csv
 import json
+import math
 import platform
 import statistics
 from datetime import datetime, timezone
@@ -155,39 +156,30 @@ def kendall(x, y):
     pairs = [(a, b) for a, b in zip(x, y) if a is not None and b is not None]
     if len(pairs) < 2:
         return None, None
-    result = kendalltau([a for a, _ in pairs], [b for _, b in pairs], variant='b')
-    tau = float(result.statistic) if result.statistic == result.statistic else None
-    p = float(result.pvalue) if result.pvalue == result.pvalue else None
-    return tau, p
+    result = kendalltau(*zip(*pairs), variant='b')
+    return tuple(None if math.isnan(v) else float(v) for v in (result.statistic, result.pvalue))
 
 
 def summarise(values):
     """n, median and the interquartile range: what every table reports."""
     clean = sorted(v for v in values if v is not None)
     if not clean:
-        return {'n': 0, 'median': None, 'q1': None, 'q3': None, 'min': None, 'max': None,
-                'mean': None}
-    quartiles = (statistics.quantiles(clean, n=4) if len(clean) > 1 else [clean[0]] * 3)
-    return {'n': len(clean), 'median': statistics.median(clean),
-            'q1': quartiles[0], 'q3': quartiles[2],
-            'min': clean[0], 'max': clean[-1], 'mean': statistics.fmean(clean)}
-
-
-def macro(rows, value_key, group_key='domain'):
-    """Mean of the per-domain means: domains contribute unequal instance counts,
-    so every table reports this next to the pooled figure."""
-    groups = {}
-    for row in rows:
-        value = row.get(value_key)
-        if value is not None:
-            groups.setdefault(row.get(group_key), []).append(value)
-    means = [statistics.fmean(values) for values in groups.values() if values]
-    return statistics.fmean(means) if means else None
+        return {'n': 0, 'median': None, 'q1': None, 'q3': None}
+    q1, median, q3 = statistics.quantiles(clean, n=4) if len(clean) > 1 else clean * 3
+    return {'n': len(clean), 'median': median, 'q1': q1, 'q3': q3}
 
 
 def pooled(rows, value_key):
     values = [row[value_key] for row in rows if row.get(value_key) is not None]
     return statistics.fmean(values) if values else None
+
+
+def macro(rows, value_key, group_key='domain'):
+    """Mean of the per-domain means: domains contribute unequal instance counts,
+    so every table reports this next to the pooled figure."""
+    means = [pooled(cell, value_key) for cell in group(rows, (group_key,)).values()]
+    means = [m for m in means if m is not None]
+    return statistics.fmean(means) if means else None
 
 
 def group(rows, keys):
@@ -202,15 +194,14 @@ def group(rows, keys):
 # Figures
 # ----------------------------------------------------------------------
 
-def figure(size=(5.2, 3.2), **kwargs):
-    """A matplotlib figure with no title text: the caption carries the words."""
+def figure(size=(5.2, 3.2)):
+    """One axes with no title text: the caption carries the words."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(figsize=size, **kwargs)
-    for ax in (axes.flat if hasattr(axes, 'flat') else [axes]):
-        ax.set_prop_cycle(color=list(PALETTE))
-    return fig, axes
+    fig, ax = plt.subplots(figsize=size)
+    ax.set_prop_cycle(color=list(PALETTE))
+    return fig, ax
 
 
 def save(fig, path):

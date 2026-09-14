@@ -12,10 +12,8 @@ from pathlib import Path
 
 from unified_planning.exceptions import UPException
 from unified_planning.io import PDDLReader
-from unified_planning.shortcuts import SequentialSimulator
 
 from behaviour_diversity_counter import InapplicablePlanError
-from behaviour_diversity_counter.simulation import simulate
 from bdc_experiments import SCHEMA_VERSION
 from bdc_experiments.config import results_root
 
@@ -105,31 +103,24 @@ def parse_plans(task, pool):
     return plans, dropped
 
 
-def load_pool(path, counter=None, task=None):
+def load_pool(path, counter, task):
     """A pool ready for selection: parsed, replayed, cost-filtered, cost-sorted.
 
-    ``counter`` replays through the library (so its behaviour cache is warm and
-    the pool is walked once); without one the plans are replayed directly.
-    Returns the raw pool, the plans in canonical order, their costs, and the
-    record every result file carries.
+    The replay goes through ``counter``, so its behaviour cache is warm and
+    the pool is walked once. Returns the raw pool, the plans in canonical
+    order, their costs, and the record every result file carries.
     """
     pool = read_pool(path)
-    task = task if task is not None else task_of(pool)
 
     clock = time.perf_counter()
     parsed, dropped_parse = parse_plans(task, pool)
     parse_s = time.perf_counter() - clock
 
     clock = time.perf_counter()
-    simulator = SequentialSimulator(problem=task) if counter is None else None
     replayed, dropped_replay = [], list(dropped_parse)
     for index, plan in parsed:
         try:
-            if counter is None:
-                cost = simulate(task, plan, simulator)[1]
-            else:
-                counter.b_coverage([plan])      # replays, caches, sets plan.cost
-                cost = plan.cost
+            counter.b_coverage([plan])          # replays, caches, sets plan.cost
         except (InapplicablePlanError, UPException) as failure:
             # The library raises its own error when a step reaches no state;
             # unified-planning raises UPInvalidActionError when the step cannot
@@ -138,14 +129,13 @@ def load_pool(path, counter=None, task=None):
             dropped_replay.append({'original_index': index,
                                    'reason': f'{type(failure).__name__}: {failure}'})
             continue
-        replayed.append((index, plan, cost))
+        replayed.append((index, plan, plan.cost))
     replay_s = time.perf_counter() - clock
 
-    # The bound of phase one, re-applied on the way in. Only a top-quality pool
-    # has one: `topk` takes the k cheapest plans whatever they cost.
+    # The bound of phase one, re-applied on the way in.
     dropped_cost, bound = [], None
     optimal = pool.get('optimal_cost')
-    if optimal is not None and pool.get('mode') == 'topq':
+    if optimal is not None:
         bound = Fraction(str(pool.get('q', 1.0))) * Fraction(optimal)
         kept = []
         for index, plan, cost in replayed:
@@ -194,23 +184,29 @@ def model_distance(counter, b1, b2):
     return sum(dimension.distance(b1, b2) for dimension in counter.dimensions.values())
 
 
-def dump_path(cfg, model_hash, loaded):
-    record = loaded['record']
-    return (results_root(cfg) / 'behaviours' / model_hash / record['domain']
-            / Path(record['instance']).name / f"{record['pool_stem']}.json")
+def pool_path(cfg, domain, stem, pool_stem):
+    """Where a pool lives: ``pools/<domain>/<instance stem>/<pool stem>.json``."""
+    return results_root(cfg) / 'pools' / domain / stem / f'{pool_stem}.json'
+
+
+def dump_path(cfg, model_hash, domain, instance, pool_stem):
+    """Where a pool's dump under a model lives: the model hash in the path is
+    the whole of the invalidation logic, a changed model being a changed path."""
+    return (results_root(cfg) / 'behaviours' / model_hash / domain / Path(instance).name
+            / f'{pool_stem}.json')
 
 
 def behaviour_dump(cfg, counter, loaded, model_record, force=False):
     """Per-plan behaviour and cost plus the b x b dissimilarity matrix.
 
     Written once per (model, pool) and read by every later task and report.
-    The model hash in the path is the whole of the invalidation logic: a
-    changed model is a changed path. Under the stability model every distinct
-    action set is a behaviour, so b runs to the pool size and the matrix is
-    left out (``None``): a reader recomputes a stability from the two action
-    sets, which the behaviour tuples hold.
+    Under the stability model every distinct action set is a behaviour, so b
+    runs to the pool size and the matrix is left out (``None``): a reader
+    recomputes a stability from the two action sets, which the behaviour
+    tuples hold.
     """
-    path = dump_path(cfg, model_record['hash'], loaded)
+    record = loaded['record']
+    path = dump_path(cfg, model_record['hash'], record['domain'], record['instance'], record['pool_stem'])
     if path.is_file() and not force:
         return json.loads(path.read_text())
 

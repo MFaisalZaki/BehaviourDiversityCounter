@@ -31,13 +31,18 @@ def test_the_arrays_are_split_and_throttled(generated):
     assert first.rstrip().endswith('exit 0')
 
 
-def test_the_committed_pools_need_no_generation(generated):
+def test_the_arrays_are_the_two_task_kinds_and_the_report_waits_for_them(generated):
     slurm = runner.results_root(generated) / 'slurm'
-    assert (slurm / 'cmds' / 'generate.txt').read_text() == ''
-    assert not (slurm / 'bdcexp-generate.sbatch').exists()
+    assert sorted(p.name for p in (slurm / 'cmds').iterdir()) == ['select.txt', 'time.txt']
     submit = (slurm / 'submit_all.sh').read_text()
-    assert 'bdcexp-select.sbatch' in submit and '--dependency=afterany$TASKS' in submit
-    assert 'bdcexp-generate' not in submit and '--list' not in submit
+    assert 'bdcexp-select.sbatch' in submit and 'bdcexp-time.sbatch' in submit
+    assert '--dependency=afterany$TASKS' in submit and 'report' in submit
+
+
+def test_the_arrays_need_the_pools_on_disk_first(tmp_path):
+    from bdc_experiments import jobs
+    with pytest.raises(SystemExit, match='run `bdcexp generate` first'):
+        jobs.write(load('smoke', results_dir=tmp_path))
 
 
 def test_the_local_launcher_runs_the_sweep_and_the_rerun_is_empty(generated):

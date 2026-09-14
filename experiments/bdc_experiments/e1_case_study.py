@@ -17,9 +17,8 @@ neither model.
 import json
 from itertools import combinations
 
-from bdc_experiments import models, reference, runner
+from bdc_experiments import models, pools, reference, runner
 from bdc_experiments import report as rp
-from bdc_experiments.config import results_root
 
 #: The case study's grid, fixed by the paper.
 K, KAPPA, Q = 3, 1, 2.0
@@ -65,12 +64,6 @@ def _components(features, values):
     return {f'f_{key}': value for key, value in zip(features, values)}
 
 
-def _stability(actions_of_plans):
-    """Every unordered pair's stability distance, by position in the set."""
-    return {(i, j): reference.ref_stability(actions_of_plans[i], actions_of_plans[j])
-            for i, j in combinations(range(len(actions_of_plans)), 2)}
-
-
 def _rows(result, katz):
     """Behaviour, selection, pair and stability rows for one instance."""
     dump, features, matrix = result['dump'], result['dump']['features'], result['dump']['matrix']
@@ -92,7 +85,7 @@ def _rows(result, katz):
             rows.append({**base, 'kind': 'selection', 'selector': selector, 'position': position,
                          'plan': index, 'cost': dump['plans'][index]['cost'], 'distinct': chosen[position],
                          **_components(features, dump['plans'][index]['behaviour']), **values})
-        stability = _stability(entry['actions'][:K])
+        actions = entry['actions'][:K]
         for i, j in combinations(range(len(indices)), 2):
             left, right = dump['distinct'][chosen[i]], dump['distinct'][chosen[j]]
             differing = [key for key, a, b in zip(features, left, right) if a != b]
@@ -102,7 +95,7 @@ def _rows(result, katz):
                       'differing_features': ' '.join(differing)}
                      for key, a, b in zip(features, left, right)]
             rows.append({**base, 'kind': 'stability', 'selector': selector, 'plan_i': indices[i],
-                         'plan_j': indices[j], 'stability': stability[(i, j)],
+                         'plan_j': indices[j], 'stability': reference.ref_stability(actions[i], actions[j]),
                          'same_behaviour': chosen[i] == chosen[j], 'psi': matrix[chosen[i]][chosen[j]],
                          'covered': len(set(chosen)), 'attainable': min(K, len(dump['distinct']))})
     return rows
@@ -113,8 +106,7 @@ def _fullest_cell(cfg, result, rows):
     what the model's features do not record."""
     fullest = max((r for r in rows if r['kind'] == 'behaviour'), key=lambda r: r['plans'])
     pool = result['pool']
-    path = (results_root(cfg) / 'pools' / pool['domain'] / pool['instance'].split('/')[-1]
-            / f"{pool['pool_stem']}.json")
+    path = pools.pool_path(cfg, pool['domain'], pool['instance'].split('/')[-1], pool['pool_stem'])
     plans = json.loads(path.read_text())['plans'] if path.is_file() else []
     members = [p for p in result['dump']['plans'] if p['distinct'] == fullest['distinct']][:2]
     return fullest, [(p['index'], plans[p['original_index']]['actions']) for p in members if plans]
@@ -157,12 +149,12 @@ def _note(cfg, cases):
 
 def report(cfg):
     kept = {models.domain_model(cfg, d).name for d in cfg['e1']['domains']} | {'stability'}
-    pools = rp.by_pool([r for r in rp.selections(cfg, keep=lambda name: name in kept)
-                        if float(r['pool']['q']) == Q])
+    by_pool = rp.by_pool([r for r in rp.selections(cfg, keep=lambda name: name in kept)
+                          if float(r['pool']['q']) == Q])
     cases = {}
     for domain in cfg['e1']['domains']:
         model = models.domain_model(cfg, domain).name
-        results = [found[model] for (instance, _), found in pools.items()
+        results = [found[model] for (instance, _), found in by_pool.items()
                    if instance.split('/')[0] == domain and model in found and 'stability' in found]
         survey = _survey(results)
         chosen, clause = _choose(cfg, survey)
@@ -170,7 +162,7 @@ def report(cfg):
             raise SystemExit(f'E1: no selection result for {domain} at q = {Q} under {model} and '
                              'stability; run the select tasks first')
         result = next(r for r in results if r['task_id'] == chosen['task_id'])
-        katz = pools[(result['pool']['instance'], result['pool']['pool_stem'])]['stability']
+        katz = by_pool[(result['pool']['instance'], result['pool']['pool_stem'])]['stability']
         cases[domain] = (survey, chosen, clause, result, _rows(result, katz))
 
     out = rp.report_dir(cfg, 'e1')
@@ -228,7 +220,7 @@ def report(cfg):
     note = out / 'e1_note.md'
     note.write_text(_note(cfg, cases))
     written.append(note)
-    written.append(rp.manifest(cfg, 'e1', written, [r for f in pools.values() for r in f.values()], extra={
+    written.append(rp.manifest(cfg, 'e1', written, [r for f in by_pool.values() for r in f.values()], extra={
         'rule': RULE, 'k': K, 'kappa': KAPPA, 'q': Q,
         'chosen': {d: {'instance': c['instance'], 'pool_stem': c['pool_stem'], 'clause': clause,
                        'b': c['b'], 'pool_size': c['pool_size'], 'agents_values': c['agents_values']}

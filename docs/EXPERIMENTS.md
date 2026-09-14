@@ -9,6 +9,23 @@ the paper.
 ## Install
 
 ```console
+experiments/setup_benchmark.sh                 # venv, install, benchmark checkout, job arrays
+experiments/setup_benchmark.sh --submit        # ...and submit the sweep (slurm)
+experiments/setup_benchmark.sh --local-jobs 4  # ...or run it here, reports included
+```
+
+The one-shot script creates `venv/`, installs the library and the harness
+with the report extras (`pip install -e '.[analysis]'`), clones the benchmark
+at the pinned commit, unpacks the pools of the archive against it (phase one,
+seconds), writes the job arrays with `bdcexp jobs`, and then either submits
+them or runs the same commands locally. `--config` picks the
+config, `--results-dir` the run directory, `--skip-existing` resumes a partial
+sweep, `--skip-install` and `--skip-fetch` skip a step already done. Slurm
+settings are read from the config's `[slurm]` section, not from flags.
+
+By hand, the same is:
+
+```console
 poetry install --extras analysis
 ```
 
@@ -135,6 +152,7 @@ alone, with no planner installed.
 ### On a cluster
 
 ```console
+experiments/setup_benchmark.sh --submit               # everything below, in one go
 bdcexp jobs default                    # writes runs/default/slurm/
 bash runs/default/slurm/submit_all.sh  # submits every array, in order
 squeue -u $USER                        # watch it
@@ -146,27 +164,28 @@ bash runs/default/slurm/run_local.sh 8 # or run the same commands locally, 8 at 
 
 ```
 runs/<name>/slurm/
-  cmds/generate.txt         one `bdcexp generate --domain` per domain
   cmds/select.txt           one `bdcexp run select --task` per task
   cmds/time.txt             one `bdcexp run time --task` per task
   bdcexp-<kind>[-<n>].sbatch  one job array per chunk of at most max_array_size lines
-  submit_all.sh             clones the benchmark once, then sbatch in dependency order
+  submit_all.sh             sbatch every array, then the report job that waits for them
   run_local.sh              the same commands through GNU parallel (or bash jobs)
   logs/                     %x_%A_%a.out and .err per element
 ```
+
+A task is one pool under one model, so the pools have to be on disk before
+the arrays can be written: `bdcexp jobs` refuses to run on an empty
+`pools/`. Phase one is unpacking the archive, which takes seconds, so it is a
+setup step (`bdcexp generate`, which the setup script runs) and not a job.
 
 Each array element reads its own line of the command file and always exits
 zero, so one failed task never takes the array down; the task's own result
 file records the failure. `[slurm]` in the config sets the CPUs per element,
 an optional partition, account and QOS, the throttle (`--array=...%N` from
 `max_parallel_jobs`), the split (`max_array_size`), the headroom added to each
-task's own time and memory limit, and any extra `#SBATCH` directives. A
-phase-one element unpacks one domain's pools out of the archive, which is
-seconds, so every element gets the phase-two limits. `submit_all.sh` makes the
-task arrays wait for the pool arrays and the report job wait for the task
-arrays. `--skip-existing` leaves out every domain that
-already has pools and every task that already has a result, so a partial
-sweep is resumed by regenerating and submitting again.
+task's own time and memory limit, and any extra `#SBATCH` directives.
+`submit_all.sh` makes the report job wait for every task array.
+`--skip-existing` leaves out every task that already has a result, so a
+partial sweep is resumed by regenerating and submitting again.
 
 ### The smoke sweep
 
@@ -387,13 +406,13 @@ and configs, counting non-blank, non-comment, non-docstring lines.
 
 | Part | Code lines |
 |---|---|
-| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`, `jobs`) | 1171 |
-| `reference.py` (the Phase 0 arbiter) | 130 |
-| The two task kinds (`select`, `timing`) | 75 |
-| The three reports | 516 |
-| **Total** | **1892** |
+| Infrastructure (`config`, `benchmark`, `generate`, `pools`, `models`, `runner`, `report`, `cli`, `jobs`) | 1142 |
+| `reference.py` (the indicators, as the reports read them off a dump) | 44 |
+| The two task kinds (`select`, `timing`) | 73 |
+| The three reports | 511 |
+| **Total** | **1770** |
 
-The package is over budget by about four hundred lines. The reports each
+The package is over budget by about three hundred lines. The reports each
 write the CSVs, tables and figures their subsection of the paper names, and
 the infrastructure carries the resumable runner, the archive importer, the job
 arrays and the manifest the plan asks for; nothing was left out.
