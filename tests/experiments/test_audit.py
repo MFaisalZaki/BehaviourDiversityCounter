@@ -3,9 +3,11 @@
 Every indicator and phase-two rule the experiments lean on is checked against
 ``bdc_experiments.reference``, written straight from the definitions and
 sharing no code with the library. Spaces are drawn at random and seeded from
-the case number, so a failure names a seed that reproduces it. No planner and
-no PDDL task: the stub counter of ``conftest.py`` hands the library behaviour
-strings and costs, which is all the indicators read.
+the case number, so a failure names a seed that reproduces it. No planner is
+needed anywhere: the stub counter of ``conftest.py`` hands the library
+behaviour strings and costs, which is all the indicators read, and the one
+test that leaves the stub spaces behind runs the same comparison over the four
+committed smoke pools and their real feature models.
 """
 
 import math
@@ -356,16 +358,17 @@ def test_reference_optima(space):
     demonstrably does; an out-of-range k gives (None, None), not a zero; and
     B-Coverage's optimum over k behaviours is k.
     """
-    smaller_is_better = None
-    for case in range(60):
+    smaller_is_better, subsets = None, 0
+    for case in range(120):
         sp = space(case)
-        counter, plans = pool_for(sp, 100000 + case, low=1, high=8)
+        counter, plans = pool_for(sp, 100000 + case, low=3, high=10)
         trip = triples(plans)
         behaviours = [b for _i, _c, b in trip]
         u = ref_distinct(behaviours)
         kappa = KAPPAS[case % len(KAPPAS)]
         for indicator in INDICATORS:
-            for k in range(1, min(len(u), 5) + 1):
+            for k in range(1, min(len(u), 5) + 1):    # C(b, k) subsets, exhaustively
+                subsets += math.comb(len(u), k)
                 why = f'seed={case} {sp} k={k} {indicator} kappa={kappa} b={len(u)}'
                 value, subset = ref_optimum(behaviours, sp.d, k, indicator, kappa)
                 at_most, upto = ref_optimum_at_most(behaviours, sp.d, k, indicator, kappa)
@@ -396,7 +399,8 @@ def test_reference_optima(space):
             assert ref_optimum_at_most([], sp.d, 3, indicator, kappa) == (None, None)
 
     assert smaller_is_better, 'no k where B-MaxMin prefers fewer than k behaviours'
-    print(f'\nthe at-most optimum beats the exact-k one: {smaller_is_better}')
+    print(f'\n{subsets} k-subsets enumerated by ref_optimum, and the sizes below k '
+          f'again by ref_optimum_at_most; the at-most optimum wins at {smaller_is_better}')
 
 
 # ----------------------------------------------------------------------
@@ -523,6 +527,9 @@ def test_extraction_matches_reference_on_the_committed_pools(tmp_path):
     assert comparisons, 'no committed pool was read'
     assert not faults, (f'{len(faults)} of {comparisons} extractions on the committed '
                         'pools disagree with the reference.\n' + '\n'.join(faults[:6]))
+    # A pool of one behaviour contributes no gap at all -- driverlog under the
+    # generic model is one -- so the measurement needs a pool that has two.
+    assert gaps, 'no committed pool exposes two distinct behaviours to measure a gap between'
     assert min(gaps) > TIE_TOLERANCE, (
         f'two distinct dissimilarities on the committed pools lie {min(gaps):.3e} apart, '
         f'inside the tie tolerance {TIE_TOLERANCE:g}: rounding at '
