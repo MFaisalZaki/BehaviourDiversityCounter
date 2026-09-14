@@ -9,6 +9,8 @@ from bdc_experiments.config import load, snapshot
 def _common(parser):
     parser.add_argument('config', help='a config file, or the name of a packaged one (default, smoke)')
     parser.add_argument('--results-dir', default=None, help='override [run].results_dir')
+    parser.add_argument('--set', action='append', default=[], metavar='SECTION.KEY=VALUE',
+                        help='override one int or str setting, e.g. slurm.partition=long')
     return parser
 
 
@@ -37,7 +39,10 @@ def main(argv=None):
                       help='leave out the pools and tasks that already have a file')
 
     args = parser.parse_args(argv)
-    cfg = load(args.config, results_dir=args.results_dir)
+    try:
+        cfg = load(args.config, results_dir=args.results_dir, overrides=args.set)
+    except (ValueError, FileNotFoundError) as bad:
+        raise SystemExit(f'bdcexp: {bad}')
     if not getattr(args, 'list', False):
         snapshot(cfg)
 

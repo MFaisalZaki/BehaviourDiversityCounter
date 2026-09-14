@@ -39,6 +39,18 @@ class TestConfig:
         with pytest.raises(ValueError, match=message):
             load(str(path))
 
+    def test_an_override_is_typed_hashed_and_recorded(self):
+        plain = load('smoke')
+        cfg = load('smoke', overrides=['slurm.partition=long', 'slurm.max_parallel_jobs=7'])
+        assert cfg['slurm']['partition'] == 'long' and cfg['slurm']['max_parallel_jobs'] == 7
+        assert cfg['meta']['overrides'] == ['slurm.partition=long', 'slurm.max_parallel_jobs=7']
+        assert cfg['meta']['config_hash'] != plain['meta']['config_hash']
+
+    @pytest.mark.parametrize('override', ['slurm.nonsense=1', 'e2.weight_settings=1', 'slurm.max_parallel_jobs=x'])
+    def test_an_override_of_the_wrong_key_or_type_is_an_error(self, override):
+        with pytest.raises(ValueError):
+            load('smoke', overrides=[override])
+
     def test_a_missing_section_is_an_error(self, tmp_path):
         text = '\n'.join(line for line in resolve('smoke').read_text().splitlines()
                          if not line.startswith('[e3]') and 'repeats' not in line

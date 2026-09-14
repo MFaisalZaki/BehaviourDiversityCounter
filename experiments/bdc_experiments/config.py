@@ -76,21 +76,32 @@ def resolve(path):
     raise FileNotFoundError(f'no config at {path} and none packaged under {CONFIG_DIR}')
 
 
-def load(path, results_dir=None):
+def load(path, results_dir=None, overrides=()):
     """The config as a dict, validated, with a ``meta`` section added.
 
     ``results_dir`` overrides ``[run].results_dir``; the tests use it to send a
-    run into a temporary directory without editing the file.
+    run into a temporary directory without editing the file. ``overrides`` are
+    ``section.key=value`` strings (``bdcexp --set``), for the int and str keys
+    only: the setup script's prompts for the slurm settings land here. They
+    are part of the hash, so a manifest names the configuration as run.
     """
     source = resolve(path)
     raw = source.read_bytes()
     cfg = tomllib.loads(raw.decode())
+    for override in overrides:
+        target, _, value = override.partition('=')
+        section, _, key = target.partition('.')
+        kind = KEYS.get(section, {}).get(key, (None,))[0]
+        if kind not in (int, str):
+            raise ValueError(f"cannot override {target}: not an int or str key of the config")
+        cfg.setdefault(section, {})[key] = kind(value)
     _validate(cfg, source)
     if results_dir is not None:
         cfg['run']['results_dir'] = str(results_dir)
     cfg['meta'] = {
         'config_path': str(source.resolve()),
-        'config_hash': hashlib.sha256(raw).hexdigest(),
+        'config_hash': hashlib.sha256(raw + ''.join(sorted(overrides)).encode()).hexdigest(),
+        'overrides': list(overrides),
         'run_name': Path(cfg['run']['results_dir']).name,
     }
     return cfg

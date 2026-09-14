@@ -266,7 +266,7 @@ def manifest(cfg, name, outputs, results, extra=None):
         'written': datetime.now(timezone.utc).isoformat(),
         'git': git_revision(),
         'config': {'path': cfg['meta']['config_path'], 'hash': cfg['meta']['config_hash'],
-                   'run_name': cfg['meta']['run_name']},
+                   'overrides': cfg['meta']['overrides'], 'run_name': cfg['meta']['run_name']},
         'benchmark': {'source': cfg['benchmark']['source'],
                       'pinned_commit': cfg['benchmark']['commit'],
                       'checkout_revision': benchmark.checkout_revision(cfg)},

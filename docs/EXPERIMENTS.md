@@ -9,8 +9,8 @@ the paper.
 ## Install
 
 ```console
-experiments/setup_benchmark.sh                 # venv, install, benchmark checkout, job arrays
-experiments/setup_benchmark.sh --submit        # ...and submit the sweep (slurm)
+experiments/setup_benchmark.sh                 # interactive: venv, install, checkout, pools, arrays
+experiments/setup_benchmark.sh --submit --yes  # every default, and submit the sweep (slurm)
 experiments/setup_benchmark.sh --local-jobs 4  # ...or run it here, reports included
 ```
 
@@ -18,10 +18,19 @@ The one-shot script creates `venv/`, installs the library and the harness
 with the report extras (`pip install -e '.[analysis]'`), clones the benchmark
 at the pinned commit, unpacks the pools of the archive against it (phase one,
 seconds), writes the job arrays with `bdcexp jobs`, and then either submits
-them or runs the same commands locally. `--config` picks the
-config, `--results-dir` the run directory, `--skip-existing` resumes a partial
-sweep, `--skip-install` and `--skip-fetch` skip a step already done. Slurm
-settings are read from the config's `[slurm]` section, not from flags.
+them or runs the same commands locally. It prompts for the virtualenv
+directory and for every slurm setting, with the config's value as the
+default: the per-task time limit (seconds or `HH:MM:SS`) and memory, the CPUs
+per task, the partition, account and QOS, the running-element cap and the
+elements per array (the site's `MaxArraySize - 1` where `scontrol` answers).
+Each prompt has a flag (`--time-limit`, `--memory-mb`, `--cpus`,
+`--partition`, `--account`, `--qos`, `--max-parallel`, `--max-array-size`,
+`--venv-dir`), and `--yes` takes every default. An answer that differs from
+the config becomes a `bdcexp --set section.key=value` override, which travels
+with every command of the sweep and is recorded, with its own hash, in every
+manifest. `--config` picks the config, `--results-dir` the run directory,
+`--skip-existing` resumes a partial sweep, `--skip-install` and
+`--skip-fetch` skip a step already done.
 
 By hand, the same is:
 
@@ -75,7 +84,10 @@ bdcexp jobs     <config> [--skip-existing]
 
 `<config>` is a path to a TOML file, or the name of one shipped with the
 package: `default` or `smoke`. Every command takes `--results-dir` to send a
-run somewhere other than the config's `[run].results_dir`.
+run somewhere other than the config's `[run].results_dir`, and `--set
+section.key=value` (repeatable) to override one int or str setting, such as
+`--set slurm.partition=long`; the overrides are part of the config hash the
+manifests record.
 
 `generate` and `run` are resumable and idempotent: `generate` skips a pool
 file that already exists, `run` skips a task that already has a result file,

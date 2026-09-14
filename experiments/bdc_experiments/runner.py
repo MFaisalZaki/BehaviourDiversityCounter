@@ -201,8 +201,8 @@ def run_task(cfg, kind, task_id, force=False):
 
 
 def _worker(arguments):
-    config_path, results_dir, kind, task_id, force = arguments
-    cfg = load(config_path, results_dir=results_dir)
+    config_path, results_dir, overrides, kind, task_id, force = arguments
+    cfg = load(config_path, results_dir=results_dir, overrides=overrides)
     result = run_task(cfg, kind, task_id, force=force)
     return task_id, result.get('error'), bool(result.get('extra', {}).get('skipped'))
 
@@ -212,8 +212,8 @@ def run(cfg, kind, only=None, force=False, jobs=1, log=print):
     ids = [t for t in tasks(cfg, kind) if only is None or t == only]
     if only is not None and not ids:
         raise ValueError(f"no task '{only}' in {kind}")
-    arguments = [(cfg['meta']['config_path'], cfg['run']['results_dir'], kind, t, force)
-                 for t in ids]
+    arguments = [(cfg['meta']['config_path'], cfg['run']['results_dir'], cfg['meta']['overrides'],
+                  kind, t, force) for t in ids]
     counts = {'ok': 0, 'failed': 0, 'skipped': 0}
     if jobs > 1:
         from concurrent.futures import ProcessPoolExecutor

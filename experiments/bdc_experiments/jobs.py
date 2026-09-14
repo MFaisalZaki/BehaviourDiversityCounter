@@ -67,8 +67,12 @@ def _hms(seconds):
 
 
 def _base(cfg, verb):
+    """``bdcexp <verb> <config> --results-dir ... [--set ...]``: the overrides
+    travel with every command, so a task sees the configuration the arrays
+    were written from."""
     return (f"{_cli()} {verb} {shlex.quote(cfg['meta']['config_path'])} "
-            f"--results-dir {shlex.quote(str(results_root(cfg)))}")
+            f"--results-dir {shlex.quote(str(results_root(cfg)))}"
+            + ''.join(f' --set {shlex.quote(o)}' for o in cfg['meta']['overrides']))
 
 
 def commands(cfg, skip_existing=False):

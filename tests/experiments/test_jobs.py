@@ -39,6 +39,19 @@ def test_the_arrays_are_the_two_task_kinds_and_the_report_waits_for_them(generat
     assert '--dependency=afterany$TASKS' in submit and 'report' in submit
 
 
+def test_an_override_reaches_the_directives_and_every_command(tmp_path):
+    from bdc_experiments import jobs, pools
+    cfg = load('smoke', results_dir=tmp_path, overrides=['slurm.partition=long', 'slurm.max_parallel_jobs=3'])
+    pools.ensure_pools(cfg)
+    jobs.write(cfg)
+    slurm = runner.results_root(cfg) / 'slurm'
+    assert '#SBATCH --partition=long' in (slurm / 'bdcexp-select.sbatch').read_text()
+    assert '%3\n' in (slurm / 'bdcexp-select.sbatch').read_text()
+    first = (slurm / 'cmds' / 'select.txt').read_text().splitlines()[0]
+    assert '--set slurm.partition=long --set slurm.max_parallel_jobs=3' in first
+    assert '--set slurm.partition=long' in (slurm / 'submit_all.sh').read_text()
+
+
 def test_the_arrays_need_the_pools_on_disk_first(tmp_path):
     from bdc_experiments import jobs
     with pytest.raises(SystemExit, match='run `bdcexp generate` first'):
