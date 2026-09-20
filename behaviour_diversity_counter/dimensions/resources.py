@@ -24,36 +24,25 @@ def _pairs(payload):
 
 
 class ResourceCountDimension(BehaviourDimension):
-    """``rc``: how many times each declared resource appears in the plan."""
+    """``rc``: how many declared resource appears in the plan."""
 
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'rc', _declared_resources(task, addinfo), declared_weight(addinfo))
 
     def extract(self, plan):
         usage = _usage(self.addinfo['objects'], plan)
-        # One prefixed token, comma-separated: ' $$ ' separates *dimensions*, so it
-        # cannot also separate counts within this one. Sorted because addinfo['objects']
-        # is a set, whose iteration order varies between processes.
-        counts = ','.join(f'{name}={usage[name]}' for name in sorted(usage))
+        # counts = ','.join(f'{name}={usage[name]}' for name in sorted(usage))
+        counts = sum(1 if v > 0 else 0 for v in usage.values())
         self.domain.add(counts)
-        return f'{self.name}:' + counts
+        return f'{self.name}:{counts}'
 
     def _counts(self, behaviour):
-        return {name: int(count) for name, count in _pairs(self.payload(behaviour)).items()}
+        return int(self.payload(behaviour))
 
     def dissimilarity(self, b1, b2):
-        # Weighted Jaccard (Ruzicka) distance over the count vectors:
-        # 1 - sum_o min(c_o, c'_o) / sum_o max(c_o, c'_o). A metric in [0, 1],
-        # zero exactly on equal counts, and the plain Jaccard of `ru` when every
-        # count is 0 or 1.
         counts1, counts2 = self._counts(b1), self._counts(b2)
-        names = counts1.keys() | counts2.keys()
-        total = sum(max(counts1.get(n, 0), counts2.get(n, 0)) for n in names)
-        if total == 0:
-            return 0.0
-        shared = sum(min(counts1.get(n, 0), counts2.get(n, 0)) for n in names)
-        return self.weight * (1.0 - shared / total)
-
+        if counts1 == counts2 == 0: return 0.0
+        return self.weight * (1.0 - (abs(counts1-counts2)/(counts1+counts2)))
 
 class ResourceUsedDimension(BehaviourDimension):
     """``ru``: the set of declared resources the plan uses at all."""

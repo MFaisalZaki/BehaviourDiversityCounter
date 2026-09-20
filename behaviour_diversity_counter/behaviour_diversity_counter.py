@@ -99,31 +99,12 @@ class BehaviourDiversityCounter:
             raise ValueError(f'unknown dimension(s) {unknown}; valid keys: {sorted(dimensions_map)}')
         self.task = task
         self.dimensions = {name: dimensions_map[name](task, addinfo) for name, addinfo in dimensions}
-        self._apply_weight_convention()
         self._simulator = SequentialSimulator(problem=task)
         self._trace_cache = trace_cache
         self._behaviour_cache = {}
         self._cost_cache = {}
         self._dissimilarity_cache = {}
-
-    def _apply_weight_convention(self):
-        """Declared weights for all dimensions or for none; none means uniform."""
-        declared = [name for name, dim in self.dimensions.items() if dim.declared_weight]
-        missing  = [name for name, dim in self.dimensions.items() if not dim.declared_weight]
-        if declared and missing:
-            raise ValueError(f'no weight given for dimension(s): {missing}; '
-                             f'declare a weight for every dimension or for none')
-        if not declared:
-            for dim in self.dimensions.values():
-                dim.weight = 1.0 / len(self.dimensions)
-            return
-        invalid = [name for name, dim in self.dimensions.items() if not 0 < dim.weight <= 1]
-        if invalid:
-            raise ValueError(f'weights must lie in (0, 1] (Def. feature); got {invalid}')
-        total = sum(dim.weight for dim in self.dimensions.values())
-        if not math.isclose(total, 1.0):
-            raise ValueError(f'weights must sum to one (Def. diversity-model); got {total}')
-
+        
     # ------------------------------------------------------------------
     # Indicators (Def. bc, Def. maxsum, Def. bmaxmin, Def. bnovelty)
     # ------------------------------------------------------------------

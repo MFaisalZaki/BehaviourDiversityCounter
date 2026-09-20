@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 packages = [
     { include = "behaviour_diversity_counter" },
-    # The paper's evaluation: one flat package, its own CLI (`bdcexp`).
+    # The paper's evaluation: `python -m bdc_experiments`.
     { include = "bdc_experiments", from = "experiments" },
 ]
 
@@ -23,10 +23,6 @@ lark = "^1.1.9"
 # (triu_indices, ix_, isin, setdiff1d, argmax), so 1.x serves as well as 2.x,
 # and a caret on either would refuse the other.
 numpy = ">=1.24"
-# `bdc_experiments.config` reads one TOML file. tomllib is standard from 3.11;
-# below that its backport stands in, and nothing else changes.
-tomli = { version = "^2.0", python = "<3.11" }
-
 # Optional extras, read by the report stage of `bdc_experiments` only: the
 # run stage is the standard library plus this library.
 matplotlib = { version = "^3.6", optional = true }
@@ -46,9 +42,6 @@ up-fast-downward = "^0.4.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
-
-[tool.poetry.scripts]
-bdcexp = 'bdc_experiments.cli:main'
 
 [build-system]
 requires = ["poetry-core"]
