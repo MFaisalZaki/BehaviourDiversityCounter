@@ -1,4 +1,4 @@
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
 #: Joins the action strings inside the token. ' $$ ' separates dimensions, so
 #: it cannot also separate actions within this one.
@@ -18,7 +18,7 @@ class StabilityDimension(BehaviourDimension):
     """
 
     def __init__(self, task, addinfo=None):
-        super().__init__(task, 'stability', addinfo, declared_weight(addinfo))
+        super().__init__(task, 'stability', addinfo)
 
     def extract(self, plan):
         value = SEPARATOR.join(sorted({str(action) for action in plan.actions}))
@@ -32,4 +32,4 @@ class StabilityDimension(BehaviourDimension):
         a1, a2 = self._actions(b1), self._actions(b2)
         if not a1 and not a2:
             return 0.0
-        return self.weight * (1.0 - len(a1 & a2) / len(a1 | a2))
+        return 1.0 - len(a1 & a2) / len(a1 | a2)

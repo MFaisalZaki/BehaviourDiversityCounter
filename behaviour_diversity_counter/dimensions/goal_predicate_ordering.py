@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight, options
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension, options
 
 
 class GoalPredicatesOrderingDimension(BehaviourDimension):
@@ -15,7 +15,7 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
     """
 
     def __init__(self, task, addinfo=None):
-        super().__init__(task, 'go', addinfo, declared_weight(addinfo))
+        super().__init__(task, 'go', addinfo)
         from unified_planning.model.walkers.free_vars import FreeVarsExtractor
         atoms = []
         for goal in self.task.goals:
@@ -41,4 +41,4 @@ class GoalPredicatesOrderingDimension(BehaviourDimension):
         # of goals so that it lies in [0, 1] (Def. feature).
         ordering1, ordering2 = self._ordering(b1), self._ordering(b2)
         hamming = sum(x != y for x, y in zip(ordering1, ordering2))
-        return self.weight * (hamming / len(ordering1) if ordering1 else 0.0)
+        return hamming / len(ordering1) if ordering1 else 0.0

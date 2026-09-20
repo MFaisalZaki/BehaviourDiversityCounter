@@ -2,30 +2,12 @@ from collections.abc import Mapping
 
 
 def options(addinfo):
-    """A dimension's ``addinfo`` as a mapping.
-
-    ``None`` means nothing was supplied; a bare string is the path of the
-    dimension's declaration file; a mapping is taken as it is.
-    """
+    """A dimension's ``addinfo`` as a mapping; ``None`` means nothing was supplied."""
     if addinfo is None:
         return {}
-    if isinstance(addinfo, Mapping):
-        return addinfo
-    return {'file': addinfo}
-
-
-def declaration_source(addinfo):
-    """The declaration file a dimension was pointed at, if any."""
-    return options(addinfo).get('file')
-
-
-def declared_weight(addinfo):
-    """The weight a dimension's ``addinfo`` declares, or None when it does not.
-
-    The counter turns None into the uniform ``1/n`` when no dimension declares
-    a weight, so this must stay distinguishable from an explicit ``1.0``.
-    """
-    return options(addinfo).get('weight')
+    if not isinstance(addinfo, Mapping):
+        raise TypeError(f'addinfo must be a mapping or None; got {addinfo!r}')
+    return addinfo
 
 
 def token_payload(behaviour, name):
@@ -40,21 +22,18 @@ def token_payload(behaviour, name):
             return part[len(name) + 1:].strip()
     return None
 
-
 class BehaviourDimension:
-    """One feature ``<Delta, extract, psi, w>`` of the paper's Def. feature:
+    """One feature ``<Delta, extract, psi>`` of the paper's Def. feature:
     the values a plan can take on the dimension (``domain``), the extracting
-    function (``extract``), the dissimilarity ``psi`` on those values, in
-    ``[0, 1]`` before the weight is applied (``dissimilarity``), and the
-    weight ``w``.
+    function (``extract``), and the dissimilarity ``psi`` on those values,
+    in ``[0, 1]`` (``dissimilarity``). The counter averages the dimensions'
+    dissimilarities into ``psi_M``.
     """
 
-    def __init__(self, task, name, addinfo, weight=None):
+    def __init__(self, task, name, addinfo):
         self.task    = task
         self.name    = name
         self.addinfo = addinfo
-        self.declared_weight = weight is not None
-        self.weight  = 1.0 if weight is None else float(weight)
         self.domain  = set()
 
     def payload(self, behaviour):
@@ -64,8 +43,4 @@ class BehaviourDimension:
         return value
 
     def dissimilarity(self, b1, b2):
-        """This dimension's term of ``psi_M(b, b') = sum_i w_i * psi_i(b_i, b'_i)``.
-
-        An implementation scores the pair in [0, 1] and scales by ``self.weight``.
-        """
         assert False, 'This method should be implemented by the child class.'

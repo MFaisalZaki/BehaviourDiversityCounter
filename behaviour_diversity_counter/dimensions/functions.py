@@ -1,6 +1,5 @@
-from behaviour_diversity_counter.dimensions.base import (
-    BehaviourDimension, declaration_source, declared_weight)
-from behaviour_diversity_counter.dimensions.declaration_file import parse_declaration_file
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension, options
+from behaviour_diversity_counter.dimensions.declarations import parse_declarations
 
 
 def _normalised(name):
@@ -16,12 +15,12 @@ class NumericFunctionDimension(BehaviourDimension):
     declaration ``(:function f min max delta)`` bins ``[min, max)`` into
     ``ceil((max - min) / delta)`` bins of width ``delta``. Values below ``min``
     fall into the first bin and values at or above ``max`` into the last.
+    ``addinfo['functions']`` is the list of such declaration strings.
     """
 
     def __init__(self, task, addinfo=None):
         super().__init__(task, 'fn',
-                         parse_declaration_file(declaration_source(addinfo), 'function'),
-                         declared_weight(addinfo))
+                         parse_declarations(options(addinfo).get('functions'), 'function'))
 
     @staticmethod
     def _bin_count(fn):
@@ -70,4 +69,4 @@ class NumericFunctionDimension(BehaviourDimension):
                 terms.append(0.0)
                 continue
             terms.append(abs(bins1[name] - bins2[name]) / (count - 1))
-        return self.weight * (sum(terms) / len(terms))
+        return sum(terms) / len(terms)

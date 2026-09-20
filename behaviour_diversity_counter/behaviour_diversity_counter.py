@@ -9,8 +9,7 @@ from unified_planning.shortcuts import SequentialSimulator
 from behaviour_diversity_counter.simulation import InapplicablePlanError, simulate
 from behaviour_diversity_counter.dimensions.goal_predicate_ordering import GoalPredicatesOrderingDimension
 from behaviour_diversity_counter.dimensions.cost_bound_makespan_optimal import MakespanOptimalCostDimension
-from behaviour_diversity_counter.dimensions.resources import (
-    ResourceCountDimension, ResourceNumberDimension, ResourceUsedDimension)
+from behaviour_diversity_counter.dimensions.resources import ResourceCountDimension, ResourceUsedDimension
 from behaviour_diversity_counter.dimensions.cost_bin import CostBinDimension
 from behaviour_diversity_counter.dimensions.utility_value import UtilityValueDimension
 from behaviour_diversity_counter.dimensions.functions import NumericFunctionDimension
@@ -21,7 +20,6 @@ dimensions_map = {
     'cb': MakespanOptimalCostDimension,
     'rc': ResourceCountDimension,
     'ru': ResourceUsedDimension,
-    'rn': ResourceNumberDimension,
     'uv': UtilityValueDimension,
     'fn': NumericFunctionDimension,
     'cbin': CostBinDimension,
@@ -49,14 +47,9 @@ DEFAULT_KAPPA = 3
 #: change to how a score is accumulated, or a different numpy, silently returns
 #: a different selection.
 #:
-#: Nine decimals rather than three. The noise being absorbed is of order 1e-15;
-#: three decimals declared two candidates tied whenever they came within 5e-4 of
-#: each other, which let the greedy take a plan that is not the maximiser the
-#: paper's rule names -- the Phase 0 audit found such a case in a random
-#: behaviour space, where the greedy gave away 8.8e-05 of B-MaxSum. On the
-#: benchmark's own spaces, whose dissimilarities are rationals with small
-#: denominators, the two settings select identically (648 selections compared,
-#: none changed); see docs/AUDIT.md.
+#: Nine decimals: the noise being absorbed is of order 1e-15, and a coarser
+#: tolerance declares candidates tied that are not, which lets the greedy take
+#: a plan that is not the maximiser the paper's rule names.
 TIE_DECIMALS = 9
 
 
@@ -74,17 +67,13 @@ class BehaviourDiversityCounter:
     """A diversity model over one task, and the paper's four indicators on it.
 
     ``dimensions`` is an iterable of ``(key, addinfo)`` pairs, one feature
-    ``<Delta, extract, psi, w>`` each in the sense of Def. feature: the key
+    ``<Delta, extract, psi>`` each in the sense of Def. feature: the key
     names the dimension and its extracting function, the dimension class
-    supplies the per-dimension dissimilarity, and ``addinfo`` may declare the
-    weight (``{'weight': w}``) next to whatever else the dimension needs.
-    Together they are the diversity model M of Def. diversity-model, whose
-    dissimilarity is ``psi_M(a, b) = sum_i w_i * psi_i(a[i], b[i])``.
-
-    Weights are declared for every dimension or for none. Declared weights lie
-    in ``(0, 1]`` and sum to one, as Def. feature and Def. diversity-model
-    require, which keeps ``psi_M`` in ``[0, 1]``. With none declared they
-    default to the uniform ``1/n``, the weights of the paper's rover example.
+    supplies the per-dimension dissimilarity, and ``addinfo`` carries
+    whatever else the dimension needs. Together they are the diversity model
+    M of Def. diversity-model, whose dissimilarity is the mean of the
+    per-dimension dissimilarities, ``psi_M(a, b) = (1/n) * sum_i psi_i(a[i],
+    b[i])``. Each ``psi_i`` lies in ``[0, 1]``, so ``psi_M`` does too.
     """
 
     def __init__(self, task, dimensions, trace_cache=None):
@@ -325,11 +314,14 @@ class BehaviourDiversityCounter:
         return self._trace_cache[id(plan)]
 
     def _dissimilarity(self, b1, b2):
-        """psi_M(b1, b2) = sum_i w_i * psi_i(b1[i], b2[i]) (Def.
-        diversity-model); each dimension applies its own weight."""
+        """psi_M(b1, b2): the mean of the per-dimension dissimilarities,
+        (1/n) * sum_i psi_i(b1[i], b2[i]) (Def. diversity-model). Each psi_i
+        lies in [0, 1], so psi_M does too."""
         if len(self.dimensions) == 0: return 0.0
         if (b1, b2) not in self._dissimilarity_cache:
-            self._dissimilarity_cache[(b1, b2)] = sum(dim.dissimilarity(b1, b2) for dim in self.dimensions.values())
+            self._dissimilarity_cache[(b1, b2)] = (
+                sum(dim.dissimilarity(b1, b2) for dim in self.dimensions.values())
+                / len(self.dimensions))
             self._dissimilarity_cache[(b2, b1)] = self._dissimilarity_cache[(b1, b2)]
         return self._dissimilarity_cache[(b1, b2)]
 

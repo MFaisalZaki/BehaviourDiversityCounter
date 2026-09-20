@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight, options
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension, options
 from behaviour_diversity_counter.simulation import plan_cost
 
 
@@ -16,7 +16,7 @@ class CostBinDimension(BehaviourDimension):
     """
 
     def __init__(self, task, addinfo=None):
-        super().__init__(task, 'cbin', dict(options(addinfo)), declared_weight(addinfo))
+        super().__init__(task, 'cbin', dict(options(addinfo)))
         self.optimal_cost = Fraction(self.addinfo.get('optimal-cost', 1))
         self.q = Fraction(str(self.addinfo.get('q', 1.0)))
         self.width = Fraction(str(self.addinfo.get('width', 0.1)))
@@ -42,4 +42,4 @@ class CostBinDimension(BehaviourDimension):
     def dissimilarity(self, b1, b2):
         if self.bins < 2:
             return 0.0
-        return self.weight * abs(int(self.payload(b1)) - int(self.payload(b2))) / (self.bins - 1)
+        return abs(int(self.payload(b1)) - int(self.payload(b2))) / (self.bins - 1)

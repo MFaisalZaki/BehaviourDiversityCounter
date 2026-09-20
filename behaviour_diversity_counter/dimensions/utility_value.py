@@ -2,7 +2,7 @@ import re
 from collections import defaultdict
 from fractions import Fraction
 
-from behaviour_diversity_counter.dimensions.base import BehaviourDimension, declared_weight
+from behaviour_diversity_counter.dimensions.base import BehaviourDimension
 
 #: ``<goal>=<value>`` items of the token payload. Goal expressions may hold
 #: commas ('at(tr1, l0)'), so the split anchors on the numeric value instead.
@@ -13,7 +13,7 @@ class UtilityValueDimension(BehaviourDimension):
     """``uv``: which utility goals the plan achieves, and their total."""
 
     def __init__(self, task, addinfo):
-        super().__init__(task, 'utility_value', addinfo, declared_weight(addinfo))
+        super().__init__(task, 'utility_value', addinfo)
 
     def extract(self, plan):
         achieved_utilities = defaultdict(list)
@@ -40,7 +40,6 @@ class UtilityValueDimension(BehaviourDimension):
         utility1, utility2 = self._achieved(b1), self._achieved(b2)
         goals = utility1.keys() | utility2.keys()
         total = sum(max(utility1.get(g, 0), utility2.get(g, 0)) for g in goals)
-        if total == 0:
-            return 0.0
+        if total == 0: return 0.0
         shared = sum(min(utility1.get(g, 0), utility2.get(g, 0)) for g in goals)
-        return self.weight * float(1 - shared / total)
+        return float(1 - shared / total)

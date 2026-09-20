@@ -21,8 +21,7 @@ lark = "^1.1.9"
 # (triu_indices, ix_, isin, setdiff1d, argmax), so 1.x serves as well as 2.x,
 # and a caret on either would refuse the other.
 numpy = ">=1.24"
-# Optional extras, read by the report stage of `bdc_experiments` only: the
-# run stage is the standard library plus this library.
+# Optional analysis extras; the library itself does not import them.
 matplotlib = { version = "^3.6", optional = true }
 scipy = { version = "^1.10", optional = true }
 
