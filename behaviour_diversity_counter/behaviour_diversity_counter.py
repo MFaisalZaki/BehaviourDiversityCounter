@@ -71,9 +71,12 @@ class BehaviourDiversityCounter:
     names the dimension and its extracting function, the dimension class
     supplies the per-dimension dissimilarity, and ``addinfo`` carries
     whatever else the dimension needs. Together they are the diversity model
-    M of Def. diversity-model, whose dissimilarity is the mean of the
-    per-dimension dissimilarities, ``psi_M(a, b) = (1/n) * sum_i psi_i(a[i],
-    b[i])``. Each ``psi_i`` lies in ``[0, 1]``, so ``psi_M`` does too.
+    M of Def. diversity-model, whose dissimilarity ``psi_M`` is defined on
+    two plans: each dimension compares the value it extracts from one plan
+    with the value it extracts from the other, and ``psi_M`` is the mean of
+    those per-dimension dissimilarities,
+    ``psi_M(pi, pi') = (1/n) * sum_i psi_i(extract_i(pi), extract_i(pi'))``.
+    Each ``psi_i`` lies in ``[0, 1]``, so ``psi_M`` does too.
     """
 
     def __init__(self, task, dimensions, trace_cache=None):
@@ -101,6 +104,12 @@ class BehaviourDiversityCounter:
     def behaviours(self, plans):
         """B_M(plans): the set of distinct behaviours the plans exhibit."""
         return set(self._plan_behaviours(plans))
+
+    def dissimilarity(self, plan1, plan2):
+        """psi_M(plan1, plan2): the mean, over the dimensions, of each
+        dimension's dissimilarity between the two plans' behaviours."""
+        b1, b2 = self._plan_behaviours([plan1, plan2])
+        return self._dissimilarity(b1, b2)
 
     def b_coverage(self, plans):
         """B-Coverage: the number of distinct behaviours, |B_M(plans)|."""
@@ -314,9 +323,10 @@ class BehaviourDiversityCounter:
         return self._trace_cache[id(plan)]
 
     def _dissimilarity(self, b1, b2):
-        """psi_M(b1, b2): the mean of the per-dimension dissimilarities,
-        (1/n) * sum_i psi_i(b1[i], b2[i]) (Def. diversity-model). Each psi_i
-        lies in [0, 1], so psi_M does too."""
+        """psi_M evaluated on two behaviours. A plan enters psi_M only through
+        its behaviour, so the indicators evaluate it once per pair of distinct
+        behaviours rather than once per pair of plans; each dimension reads
+        its own token out of the two strings and scores them in [0, 1]."""
         if len(self.dimensions) == 0: return 0.0
         if (b1, b2) not in self._dissimilarity_cache:
             self._dissimilarity_cache[(b1, b2)] = (

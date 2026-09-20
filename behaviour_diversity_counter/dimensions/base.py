@@ -42,5 +42,7 @@ class BehaviourDimension:
         assert value is not None, 'The dimension value should be present in the plan behaviour.'
         return value
 
-    def dissimilarity(self, b1, b2):
-        assert False, 'This method should be implemented by the child class.'
+    def dissimilarity(self, pi1, pi2):
+        """psi_i on two behaviours: the dimension's dissimilarity function."""
+        # This is a placeholder implementation; each child class should override this.
+        assert False, 'dissimilarity() must be implemented in subclasses of BehaviourDimension.'

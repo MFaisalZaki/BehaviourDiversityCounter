@@ -205,12 +205,17 @@ One token per dimension, joined with ` $$ `. Each dimension locates its own toke
 
 ## The model's dissimilarity
 
-Every indicator but B-Coverage is built on one pairwise dissimilarity between behaviours,
-the mean of the per-dimension dissimilarities:
+The model's dissimilarity `ψ_M` is defined on two plans. Each dimension compares the
+value it extracts from one plan with the value it extracts from the other, and `ψ_M` is
+the mean of those per-dimension dissimilarities:
 
-    ψ_M(b, b') = (1/n) · Σᵢ ψᵢ(bᵢ, b'ᵢ)
+    ψ_M(π, π') = (1/n) · Σᵢ ψᵢ(extractᵢ(π), extractᵢ(π'))
 
-Each `ψᵢ` lies in `[0, 1]`, so `ψ_M` does too.
+Each `ψᵢ` lies in `[0, 1]`, so `ψ_M` does too. `counter.dissimilarity(plan, plan')`
+returns it. A plan enters `ψ_M` only through its behaviour, so two plans with the same
+behaviour are at distance `0` and every indicator but B-Coverage evaluates `ψ_M` once per
+pair of distinct behaviours. Inside each dimension, `ψᵢ` reads its own token out of the
+two behaviour strings:
 
 | dimension | dissimilarity |
 | --- | --- |
