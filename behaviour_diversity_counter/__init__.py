@@ -1,7 +1,14 @@
 from behaviour_diversity_counter.behaviour_diversity_counter import (
+    DEFAULT_KAPPA,
     BehaviourDiversityCounter,
-    InapplicablePlanError,
     dimensions_map,
 )
+from behaviour_diversity_counter.simulation import InapplicablePlanError, plan_cost
 
-__all__ = ['BehaviourDiversityCounter', 'InapplicablePlanError', 'dimensions_map']
+__all__ = [
+    'DEFAULT_KAPPA',
+    'BehaviourDiversityCounter',
+    'InapplicablePlanError',
+    'dimensions_map',
+    'plan_cost',
+]

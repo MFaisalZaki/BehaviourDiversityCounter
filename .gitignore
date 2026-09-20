@@ -201,6 +201,11 @@ v-env/
 dev.py
 ibm-diversescore/
 *.error
-# paper-experiments: generated/downloaded data (the zip is the source of truth)
-paper-experiments/data/fi-generated-plans-dir/
-paper-experiments/data/classical-domains/
+# The benchmark checkout `python -m bdc_experiments index` clones; the plan
+# archive and the ru-info tree next to it are the source data and are committed.
+experiments/data/classical-domains/
+benchmark-run*/
+benchmark-run.zip
+# Sweep output: `runs/<name>/` is generated, and is the artefact that ships
+# with the paper rather than something the repository carries.
+runs/

@@ -1,18 +1,35 @@
 [tool.poetry]
 name = "behaviour-diversity-counter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Behaviour diversity counter aimed at unified planning interface"
 authors = ["MFaisalZaki <mustafa.faisal.eng@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+packages = [
+    { include = "behaviour_diversity_counter" },
+    # The paper's evaluation: `python -m bdc_experiments`.
+    { include = "bdc_experiments", from = "experiments" },
+]
 
 [tool.poetry.dependencies]
 # Capped below 3.14: unified-planning pulls in scipy, which has no 3.14+ wheels
 # and fails to build from source there.
 python = ">=3.10,<3.14"
-# The only two packages the library imports.
+# The only three packages the library imports.
 unified-planning = "^1.3.0"
 lark = "^1.1.9"
+# Greedy extraction holds its plan-by-plan distances in an ndarray and picks
+# with argmax. Lower bound rather than a caret: the calls used are long-stable
+# (triu_indices, ix_, isin, setdiff1d, argmax), so 1.x serves as well as 2.x,
+# and a caret on either would refuse the other.
+numpy = ">=1.24"
+# Optional extras, read by the report stage of `bdc_experiments` only: the
+# run stage is the standard library plus this library.
+matplotlib = { version = "^3.6", optional = true }
+scipy = { version = "^1.10", optional = true }
+
+[tool.poetry.extras]
+analysis = ["matplotlib", "scipy"]
 
 # Planner engines. Not imported by this package -- it consumes plans rather than
 # producing them -- so they are optional: `poetry install --with planners`.
@@ -32,4 +49,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "experiments"]
