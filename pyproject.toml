@@ -7,8 +7,6 @@ license = "MIT"
 readme = "README.md"
 packages = [
     { include = "behaviour_diversity_counter" },
-    # The paper's evaluation: `python -m bdc_experiments`.
-    { include = "bdc_experiments", from = "experiments" },
 ]
 
 [tool.poetry.dependencies]
@@ -49,4 +47,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "experiments"]
+pythonpath = ["."]
